@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import text
 
 from app.core.config import Settings, get_settings
-from app.db.session import engine, ensure_schema_ready, run_migrations
+from app.db.session import engine, ensure_schema_ready
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,6 @@ async def initialize_runtime() -> None:
             "database_url_masked": mask_database_url(settings.database_url),
         },
     )
-
-    if settings.run_db_migrations_on_startup:
-        await run_migrations()
 
     await verify_database(settings)
     await ensure_schema_ready()
