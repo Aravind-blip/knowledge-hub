@@ -1,4 +1,6 @@
 #!/usr/bin/env sh
 set -e
 
-exec uvicorn app.main:app --host 0.0.0.0 --port "${API_PORT:-8000}"
+PORT_TO_BIND="${PORT:-${API_PORT:-8000}}"
+
+exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT_TO_BIND}"
