@@ -26,54 +26,48 @@ def upgrade() -> None:
     for table_name in ("documents", "document_chunks", "chat_sessions", "chat_messages", "ingestion_jobs"):
         op.execute(f"ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY")
 
-    op.execute("DROP POLICY IF EXISTS documents_owner_policy ON documents")
     op.execute(
         """
-        CREATE POLICY documents_owner_policy
-        ON documents
-        FOR ALL
-        USING (auth.uid() = user_id)
-        WITH CHECK (auth.uid() = user_id)
-        """
-    )
-    op.execute("DROP POLICY IF EXISTS document_chunks_owner_policy ON document_chunks")
-    op.execute(
-        """
-        CREATE POLICY document_chunks_owner_policy
-        ON document_chunks
-        FOR ALL
-        USING (auth.uid() = user_id)
-        WITH CHECK (auth.uid() = user_id)
-        """
-    )
-    op.execute("DROP POLICY IF EXISTS chat_sessions_owner_policy ON chat_sessions")
-    op.execute(
-        """
-        CREATE POLICY chat_sessions_owner_policy
-        ON chat_sessions
-        FOR ALL
-        USING (auth.uid() = user_id)
-        WITH CHECK (auth.uid() = user_id)
-        """
-    )
-    op.execute("DROP POLICY IF EXISTS chat_messages_owner_policy ON chat_messages")
-    op.execute(
-        """
-        CREATE POLICY chat_messages_owner_policy
-        ON chat_messages
-        FOR ALL
-        USING (auth.uid() = user_id)
-        WITH CHECK (auth.uid() = user_id)
-        """
-    )
-    op.execute("DROP POLICY IF EXISTS ingestion_jobs_owner_policy ON ingestion_jobs")
-    op.execute(
-        """
-        CREATE POLICY ingestion_jobs_owner_policy
-        ON ingestion_jobs
-        FOR ALL
-        USING (auth.uid() = user_id)
-        WITH CHECK (auth.uid() = user_id)
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'auth') THEN
+                DROP POLICY IF EXISTS documents_owner_policy ON documents;
+                CREATE POLICY documents_owner_policy
+                ON documents
+                FOR ALL
+                USING (auth.uid() = user_id)
+                WITH CHECK (auth.uid() = user_id);
+
+                DROP POLICY IF EXISTS document_chunks_owner_policy ON document_chunks;
+                CREATE POLICY document_chunks_owner_policy
+                ON document_chunks
+                FOR ALL
+                USING (auth.uid() = user_id)
+                WITH CHECK (auth.uid() = user_id);
+
+                DROP POLICY IF EXISTS chat_sessions_owner_policy ON chat_sessions;
+                CREATE POLICY chat_sessions_owner_policy
+                ON chat_sessions
+                FOR ALL
+                USING (auth.uid() = user_id)
+                WITH CHECK (auth.uid() = user_id);
+
+                DROP POLICY IF EXISTS chat_messages_owner_policy ON chat_messages;
+                CREATE POLICY chat_messages_owner_policy
+                ON chat_messages
+                FOR ALL
+                USING (auth.uid() = user_id)
+                WITH CHECK (auth.uid() = user_id);
+
+                DROP POLICY IF EXISTS ingestion_jobs_owner_policy ON ingestion_jobs;
+                CREATE POLICY ingestion_jobs_owner_policy
+                ON ingestion_jobs
+                FOR ALL
+                USING (auth.uid() = user_id)
+                WITH CHECK (auth.uid() = user_id);
+            END IF;
+        END
+        $$;
         """
     )
 
