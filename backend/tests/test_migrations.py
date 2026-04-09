@@ -60,3 +60,24 @@ async def test_run_migrations_stamps_legacy_schema(monkeypatch) -> None:
 
     assert calls[0][0] == "stamp"
     assert calls[1][0] == "upgrade"
+
+
+@pytest.mark.anyio
+async def test_ensure_schema_ready_falls_back_to_metadata_create(monkeypatch) -> None:
+    calls = {"count": 0, "init_db_called": False}
+
+    async def fake_get_existing_tables_with_extension():
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return set()
+        return set(db_session.REQUIRED_TABLES)
+
+    async def fake_init_db():
+        calls["init_db_called"] = True
+
+    monkeypatch.setattr(db_session, "_get_existing_tables_with_extension", fake_get_existing_tables_with_extension)
+    monkeypatch.setattr(db_session, "init_db", fake_init_db)
+
+    await db_session.ensure_schema_ready()
+
+    assert calls["init_db_called"] is True

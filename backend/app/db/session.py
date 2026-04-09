@@ -33,6 +33,26 @@ async def init_db() -> None:
 
 
 async def ensure_schema_ready() -> None:
+    existing_tables = await _get_existing_tables_with_extension()
+    missing_tables = REQUIRED_TABLES - existing_tables
+
+    if missing_tables:
+        logger.warning(
+            "Schema tables missing after startup preparation; attempting direct metadata creation",
+            extra={"missing_tables": sorted(missing_tables)},
+        )
+        await init_db()
+        existing_tables = await _get_existing_tables_with_extension()
+        missing_tables = REQUIRED_TABLES - existing_tables
+
+    if missing_tables:
+        missing = ", ".join(sorted(missing_tables))
+        raise RuntimeError(
+            f"Database schema is not ready. Missing tables: {missing}. Run migrations before starting the app."
+        )
+
+
+async def _get_existing_tables_with_extension() -> set[str]:
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         result = await conn.execute(
@@ -44,14 +64,7 @@ async def ensure_schema_ready() -> None:
                 """
             )
         )
-        existing_tables = {row[0] for row in result}
-
-    missing_tables = REQUIRED_TABLES - existing_tables
-    if missing_tables:
-        missing = ", ".join(sorted(missing_tables))
-        raise RuntimeError(
-            f"Database schema is not ready. Missing tables: {missing}. Run migrations before starting the app."
-        )
+        return {row[0] for row in result}
 
 
 async def run_migrations() -> None:
@@ -72,14 +85,4 @@ async def run_migrations() -> None:
 
 
 async def _get_existing_tables() -> set[str]:
-    async with engine.begin() as conn:
-        result = await conn.execute(
-            text(
-                """
-                SELECT table_name
-                FROM information_schema.tables
-                WHERE table_schema = 'public'
-                """
-            )
-        )
-        return {row[0] for row in result}
+    return await _get_existing_tables_with_extension()
