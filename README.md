@@ -358,7 +358,7 @@ alembic -c alembic.ini upgrade head
    - `NEXT_PUBLIC_APP_URL=https://YOUR_VERCEL_HOST`
 4. Deploy.
 
-The repo config is in [vercel.json](/Users/aravindbandipelli/Desktop/AravindCode-bot/vercel.json).
+The repo config is in [vercel.json](/Users/aravindbandipelli/Desktop/AravindCode-bot/vercel.json). Set the Vercel project root directory to `frontend` in the dashboard.
 
 ### Backend: Render
 

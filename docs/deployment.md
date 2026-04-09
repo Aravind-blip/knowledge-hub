@@ -55,6 +55,7 @@ For the free public deployment path, use:
   - `API_BASE_URL=https://YOUR_BACKEND_HOST`
   - `NEXT_PUBLIC_APP_URL=https://YOUR_VERCEL_HOST`
 - Repo config: [vercel.json](/Users/aravindbandipelli/Desktop/AravindCode-bot/vercel.json)
+- Set the Vercel project root directory to `frontend` in the project settings
 
 ## Render
 
