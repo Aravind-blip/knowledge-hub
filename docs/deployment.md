@@ -54,7 +54,7 @@ For the free public deployment path, use:
 - Environment variables:
   - `API_BASE_URL=https://YOUR_BACKEND_HOST`
   - `NEXT_PUBLIC_APP_URL=https://YOUR_VERCEL_HOST`
-- Repo config: [infra/vercel.json](/Users/aravindbandipelli/Desktop/AravindCode-bot/infra/vercel.json)
+- Repo config: [vercel.json](/Users/aravindbandipelli/Desktop/AravindCode-bot/vercel.json)
 
 ## Render
 
