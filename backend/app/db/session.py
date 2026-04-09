@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from app.core.config import get_settings
 from app.db.base import Base
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 engine_kwargs = {"future": True}
 if "pooler.supabase.com" in settings.database_url:
     engine_kwargs["poolclass"] = NullPool
@@ -59,10 +61,14 @@ async def run_migrations() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     alembic_config = Config(str(repo_root / "alembic.ini"))
     alembic_config.set_main_option("sqlalchemy.url", settings.database_url)
-    existing_tables = await _get_existing_tables()
-    if REQUIRED_TABLES.issubset(existing_tables) and "alembic_version" not in existing_tables:
-        await asyncio.to_thread(command.stamp, alembic_config, "head")
-    await asyncio.to_thread(command.upgrade, alembic_config, "head")
+    try:
+        existing_tables = await _get_existing_tables()
+        if REQUIRED_TABLES.issubset(existing_tables) and "alembic_version" not in existing_tables:
+            await asyncio.to_thread(command.stamp, alembic_config, "head")
+        await asyncio.to_thread(command.upgrade, alembic_config, "head")
+    except Exception:
+        logger.exception("Alembic migration failed during startup")
+        raise
 
 
 async def _get_existing_tables() -> set[str]:
