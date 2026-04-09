@@ -96,6 +96,7 @@ class OpenAIGenerationService(GenerationService):
                 "- If the evidence is weak or missing, say 'Not enough information found in indexed documents.'\n"
                 "- Do not invent policies, numbers, or procedures.\n"
                 "- Keep the answer concise and professional.\n"
+                "- Refer to documents by file name when identifying a source. Do not say 'Source 1' or 'Source 2'.\n"
                 "- When evidence is weak, set confidence_note to 'Evidence was too weak to support a reliable result.'\n"
                 "- Return only citations that support the answer.\n\n"
                 f"Conversation context:\n{history_lines or 'No previous context.'}\n\n"
@@ -166,6 +167,7 @@ class GroqGenerationService(GenerationService):
                 "- If the evidence is weak or missing, say 'Not enough information found in indexed documents.'\n"
                 "- Do not invent policies, numbers, or procedures.\n"
                 "- Keep the answer concise and professional.\n"
+                "- Refer to documents by file name when identifying a source. Do not say 'Source 1' or 'Source 2'.\n"
                 "- When evidence is weak, set confidence_note to 'Evidence was too weak to support a reliable result.'\n"
                 "- Return only citations that support the answer.\n\n"
                 f"Conversation context:\n{history_lines or 'No previous context.'}\n\n"
@@ -238,7 +240,11 @@ class ExtractiveGenerationService(GenerationService):
 
 
 def build_answer_payload(llm_payload: LLMAnswerPayload, retrieved_chunks: list[SourceCitation]) -> AnswerPayload:
-    if llm_payload.insufficient_information:
+    strong_chunks = [chunk for chunk in retrieved_chunks if chunk.relevance_score >= settings.answer_min_score]
+    weak_confidence = (llm_payload.confidence_note or "").lower()
+    evidence_is_weak = not strong_chunks or "weak" in weak_confidence or "not enough information" in llm_payload.answer.lower()
+
+    if llm_payload.insufficient_information or evidence_is_weak:
         return AnswerPayload(
             answer="Not enough information found in indexed documents.",
             insufficient_information=True,
@@ -246,8 +252,7 @@ def build_answer_payload(llm_payload: LLMAnswerPayload, retrieved_chunks: list[S
             citations=retrieved_chunks[:2],
         )
 
-    strong_chunks = [chunk for chunk in retrieved_chunks if chunk.relevance_score >= settings.answer_min_score]
-    citations = strong_chunks[:3] if strong_chunks else retrieved_chunks[:2]
+    citations = strong_chunks[:3]
     return AnswerPayload(
         answer=llm_payload.answer,
         insufficient_information=False,

@@ -88,3 +88,19 @@ def test_build_answer_payload_returns_fallback_message_for_weak_answer():
     assert result.insufficient_information is True
     assert result.answer == "Not enough information found in indexed documents."
     assert result.citations[0].chunk_id == citation.chunk_id
+
+
+def test_build_answer_payload_rejects_specific_answer_when_no_strong_citations():
+    citation = build_citation(0.31, "Payroll reminders and W-4 update instructions.")
+
+    result = build_answer_payload(
+        LLMAnswerPayload(
+            answer="p15.pdf explains employer tax deposit responsibilities.",
+            insufficient_information=False,
+            confidence_note=None,
+        ),
+        [citation],
+    )
+
+    assert result.insufficient_information is True
+    assert result.answer == "Not enough information found in indexed documents."
