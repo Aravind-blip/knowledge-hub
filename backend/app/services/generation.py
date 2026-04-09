@@ -21,6 +21,12 @@ class AnswerPayload(BaseModel):
     citations: list[SourceCitation]
 
 
+class LLMAnswerPayload(BaseModel):
+    answer: str
+    insufficient_information: bool
+    confidence_note: Optional[str] = None
+
+
 class GenerationService(ABC):
     provider_name: str
     model_name: str
@@ -44,7 +50,7 @@ class OpenAIGenerationService(GenerationService):
             model=settings.openai_chat_model,
             temperature=0,
         )
-        self.structured_client = self.client.with_structured_output(AnswerPayload)
+        self.structured_client = self.client.with_structured_output(LLMAnswerPayload)
 
     async def answer(
         self,
@@ -96,7 +102,8 @@ class OpenAIGenerationService(GenerationService):
                 f"Question:\n{question}\n\n"
                 f"Sources:\n{sources}"
             )
-            payload = await self.structured_client.ainvoke(prompt)
+            llm_payload = await self.structured_client.ainvoke(prompt)
+            payload = build_answer_payload(llm_payload, retrieved_chunks)
             span.set_outputs(
                 insufficient_information=payload.insufficient_information,
                 citation_count=len(payload.citations),
@@ -113,7 +120,7 @@ class GroqGenerationService(GenerationService):
             model=settings.groq_chat_model,
             temperature=0,
         )
-        self.structured_client = self.client.with_structured_output(AnswerPayload)
+        self.structured_client = self.client.with_structured_output(LLMAnswerPayload)
 
     async def answer(
         self,
@@ -165,7 +172,8 @@ class GroqGenerationService(GenerationService):
                 f"Question:\n{question}\n\n"
                 f"Sources:\n{sources}"
             )
-            payload = await self.structured_client.ainvoke(prompt)
+            llm_payload = await self.structured_client.ainvoke(prompt)
+            payload = build_answer_payload(llm_payload, retrieved_chunks)
             span.set_outputs(
                 insufficient_information=payload.insufficient_information,
                 citation_count=len(payload.citations),
@@ -227,6 +235,25 @@ class ExtractiveGenerationService(GenerationService):
             )
             span.set_outputs(insufficient_information=False, citation_count=len(payload.citations))
             return payload
+
+
+def build_answer_payload(llm_payload: LLMAnswerPayload, retrieved_chunks: list[SourceCitation]) -> AnswerPayload:
+    if llm_payload.insufficient_information:
+        return AnswerPayload(
+            answer="Not enough information found in indexed documents.",
+            insufficient_information=True,
+            confidence_note=llm_payload.confidence_note or "Evidence was too weak to support a reliable result.",
+            citations=retrieved_chunks[:2],
+        )
+
+    strong_chunks = [chunk for chunk in retrieved_chunks if chunk.relevance_score >= settings.answer_min_score]
+    citations = strong_chunks[:3] if strong_chunks else retrieved_chunks[:2]
+    return AnswerPayload(
+        answer=llm_payload.answer,
+        insufficient_information=False,
+        confidence_note=llm_payload.confidence_note,
+        citations=citations,
+    )
 
 
 def get_generation_service() -> GenerationService:

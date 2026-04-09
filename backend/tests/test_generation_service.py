@@ -3,7 +3,11 @@ from uuid import uuid4
 import pytest
 
 from app.schemas.common import SourceCitation
-from app.services.generation import ExtractiveGenerationService
+from app.services.generation import (
+    ExtractiveGenerationService,
+    LLMAnswerPayload,
+    build_answer_payload,
+)
 
 
 def build_citation(score: float, snippet: str) -> SourceCitation:
@@ -50,3 +54,37 @@ async def test_extractive_generation_uses_strong_evidence():
 
     assert result.insufficient_information is False
     assert "Invoices are accepted in PDF, CSV, or EDI 810 format." in result.answer
+
+
+def test_build_answer_payload_attaches_real_citations_for_supported_answer():
+    citation = build_citation(0.82, "Invoices are accepted in PDF, CSV, or EDI 810 format.")
+
+    result = build_answer_payload(
+        LLMAnswerPayload(
+            answer="Invoices are accepted in PDF, CSV, or EDI 810 format.",
+            insufficient_information=False,
+            confidence_note=None,
+        ),
+        [citation],
+    )
+
+    assert result.insufficient_information is False
+    assert result.citations[0].chunk_id == citation.chunk_id
+    assert result.citations[0].document_id == citation.document_id
+
+
+def test_build_answer_payload_returns_fallback_message_for_weak_answer():
+    citation = build_citation(0.23, "Late shipment escalation steps for carrier delays.")
+
+    result = build_answer_payload(
+        LLMAnswerPayload(
+            answer="Late shipment escalations are documented elsewhere.",
+            insufficient_information=True,
+            confidence_note=None,
+        ),
+        [citation],
+    )
+
+    assert result.insufficient_information is True
+    assert result.answer == "Not enough information found in indexed documents."
+    assert result.citations[0].chunk_id == citation.chunk_id
