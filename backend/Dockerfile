@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/app ./app
 COPY backend/scripts ./scripts
-COPY infra/db/migrations ./infra/db/migrations
+COPY infra/db/migrations /infra/db/migrations
 
 RUN chmod +x ./scripts/start_backend.sh
 
