@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import AliasChoices, Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -64,15 +65,23 @@ class Settings(BaseSettings):
             return value
 
         if value.startswith("postgresql+asyncpg://"):
+            normalized = value
+        elif value.startswith("postgresql://"):
+            normalized = value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif value.startswith("postgres://"):
+            normalized = value.replace("postgres://", "postgresql+asyncpg://", 1)
+        else:
             return value
 
-        if value.startswith("postgresql://"):
-            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        parts = urlsplit(normalized)
+        query_items = []
+        for key, item_value in parse_qsl(parts.query, keep_blank_values=True):
+            if key == "sslmode":
+                query_items.append(("ssl", item_value))
+            else:
+                query_items.append((key, item_value))
 
-        if value.startswith("postgres://"):
-            return value.replace("postgres://", "postgresql+asyncpg://", 1)
-
-        return value
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query_items), parts.fragment))
 
     @computed_field
     @property

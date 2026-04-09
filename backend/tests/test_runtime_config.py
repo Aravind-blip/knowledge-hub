@@ -63,3 +63,17 @@ def test_database_url_normalizes_postgres_scheme_for_asyncpg() -> None:
     settings = Settings(_env_file=None, database_url="postgres://user:pass@db.example.com:5432/postgres")
 
     assert settings.database_url == "postgresql+asyncpg://user:pass@db.example.com:5432/postgres"
+
+
+def test_database_url_converts_sslmode_to_asyncpg_ssl_param() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url=(
+            "postgresql://postgres.project:pass@aws-1-us-west-2.pooler.supabase.com:5432/postgres?sslmode=require"
+        ),
+    )
+
+    assert (
+        settings.database_url
+        == "postgresql+asyncpg://postgres.project:pass@aws-1-us-west-2.pooler.supabase.com:5432/postgres?ssl=require"
+    )
