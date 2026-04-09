@@ -51,3 +51,15 @@ def test_langsmith_requires_api_key_when_enabled() -> None:
         assert "LANGSMITH_TRACING=true requires LANGSMITH_API_KEY" in str(exc)
     else:
         raise AssertionError("Expected validate_runtime to fail when LangSmith is enabled without an API key.")
+
+
+def test_database_url_normalizes_postgresql_scheme_for_asyncpg() -> None:
+    settings = Settings(_env_file=None, database_url="postgresql://user:pass@db.example.com:5432/postgres")
+
+    assert settings.database_url == "postgresql+asyncpg://user:pass@db.example.com:5432/postgres"
+
+
+def test_database_url_normalizes_postgres_scheme_for_asyncpg() -> None:
+    settings = Settings(_env_file=None, database_url="postgres://user:pass@db.example.com:5432/postgres")
+
+    assert settings.database_url == "postgresql+asyncpg://user:pass@db.example.com:5432/postgres"
