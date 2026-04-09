@@ -9,6 +9,7 @@ def test_alembic_assets_exist() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     assert (repo_root / "backend" / "alembic.ini").exists()
     assert (repo_root / "infra" / "db" / "migrations" / "env.py").exists()
+    assert (repo_root / "infra" / "db" / "migrations" / "versions" / "20260409_0002_user_ownership_and_rls.py").exists()
 
 
 @pytest.mark.anyio

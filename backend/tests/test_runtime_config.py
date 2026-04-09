@@ -42,6 +42,7 @@ def test_langsmith_requires_api_key_when_enabled() -> None:
         openai_api_key=None,
         generation_provider="fallback",
         embedding_provider="fallback",
+        require_auth=False,
         allow_fallback_models=True,
         langsmith_tracing=True,
         langsmith_api_key=None,
@@ -56,13 +57,13 @@ def test_langsmith_requires_api_key_when_enabled() -> None:
 
 
 def test_database_url_normalizes_postgresql_scheme_for_asyncpg() -> None:
-    settings = Settings(_env_file=None, database_url="postgresql://user:pass@db.example.com:5432/postgres")
+    settings = Settings(_env_file=None, require_auth=False, database_url="postgresql://user:pass@db.example.com:5432/postgres")
 
     assert settings.database_url == "postgresql+asyncpg://user:pass@db.example.com:5432/postgres"
 
 
 def test_database_url_normalizes_postgres_scheme_for_asyncpg() -> None:
-    settings = Settings(_env_file=None, database_url="postgres://user:pass@db.example.com:5432/postgres")
+    settings = Settings(_env_file=None, require_auth=False, database_url="postgres://user:pass@db.example.com:5432/postgres")
 
     assert settings.database_url == "postgresql+asyncpg://user:pass@db.example.com:5432/postgres"
 
@@ -70,6 +71,7 @@ def test_database_url_normalizes_postgres_scheme_for_asyncpg() -> None:
 def test_database_url_converts_sslmode_to_asyncpg_ssl_param() -> None:
     settings = Settings(
         _env_file=None,
+        require_auth=False,
         database_url=(
             "postgresql://postgres.project:pass@aws-1-us-west-2.pooler.supabase.com:5432/postgres?sslmode=require"
         ),
@@ -84,8 +86,43 @@ def test_database_url_converts_sslmode_to_asyncpg_ssl_param() -> None:
 def test_supabase_pooler_urls_should_use_nullpool() -> None:
     settings = Settings(
         _env_file=None,
+        require_auth=False,
         database_url="postgresql://postgres.project:pass@aws-1-us-west-2.pooler.supabase.com:5432/postgres",
     )
 
     assert "pooler.supabase.com" in settings.database_url
     assert NullPool is not None
+
+
+def test_auth_validation_requires_supabase_env_when_enabled() -> None:
+    settings = Settings.model_construct(
+        require_auth=True,
+        supabase_url=None,
+        supabase_anon_key=None,
+        groq_api_key=None,
+        openai_api_key=None,
+        generation_provider="fallback",
+        embedding_provider="fallback",
+        allow_fallback_models=True,
+        langsmith_tracing=False,
+        langsmith_api_key=None,
+    )
+
+    try:
+        settings.validate_runtime()
+    except ValueError as exc:
+        assert "SUPABASE_URL and SUPABASE_ANON_KEY" in str(exc)
+    else:
+        raise AssertionError("Expected validate_runtime to fail when auth is enabled without Supabase env.")
+
+
+def test_auth_validation_is_not_required_for_local_mode() -> None:
+    settings = Settings(
+        _env_file=None,
+        require_auth=False,
+        generation_provider="fallback",
+        embedding_provider="fallback",
+        allow_fallback_models=True,
+    )
+
+    settings.validate_runtime()

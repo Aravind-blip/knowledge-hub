@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     api_port: int = 8000
     allowed_origins_raw: str = "http://localhost:3000"
+    require_auth: bool = False
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/knowledge_hub"
     max_upload_size_mb: int = 15
@@ -57,6 +58,8 @@ class Settings(BaseSettings):
     langsmith_project: str = "knowledge-hub"
     langsmith_endpoint: str = "https://api.smith.langchain.com"
     run_db_migrations_on_startup: bool = False
+    supabase_url: Optional[str] = None
+    supabase_anon_key: Optional[str] = None
 
     @field_validator("database_url", mode="before")
     @classmethod
@@ -147,6 +150,9 @@ class Settings(BaseSettings):
 
         if self.langsmith_tracing and not self.langsmith_api_key:
             raise ValueError("LANGSMITH_TRACING=true requires LANGSMITH_API_KEY to be set.")
+
+        if self.require_auth and (not self.supabase_url or not self.supabase_anon_key):
+            raise ValueError("REQUIRE_AUTH=true requires SUPABASE_URL and SUPABASE_ANON_KEY to be set.")
 
 
 @lru_cache

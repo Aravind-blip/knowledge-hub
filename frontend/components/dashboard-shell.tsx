@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ReactNode } from "react";
 
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { classNames } from "@/lib/utils";
 
 
@@ -11,11 +12,28 @@ const navItems = [
   { href: "/documents", label: "Indexed files" },
   { href: "/documents/upload", label: "Upload documents" },
   { href: "/search", label: "Search answers" },
+  { href: "/history", label: "Chat history" },
 ];
 
 
-export function DashboardShell({ children }: { children: ReactNode }) {
+export function DashboardShell({
+  children,
+  userEmail,
+  authEnabled,
+}: {
+  children: ReactNode;
+  userEmail: string | null;
+  authEnabled: boolean;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function signOut() {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <div className="app-shell">
@@ -28,8 +46,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="sidebar-panel">
-          <p className="sidebar-panel__title">Workspace status</p>
-          <p className="sidebar-panel__text">Focused on indexed policies, procedures, and support references.</p>
+          <p className="sidebar-panel__title">{authEnabled ? "Workspace owner" : "Workspace mode"}</p>
+          <p className="sidebar-panel__text">{authEnabled ? userEmail ?? "Signed-in user" : "Local demo user"}</p>
         </div>
         <nav className="nav">
           {navItems.map((item) => (
@@ -47,7 +65,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="sidebar-footer">
           <p className="sidebar-footer__label">Coverage</p>
-          <p className="sidebar-footer__text">PDF and text-based sources in this MVP. Responses stay tied to cited material.</p>
+          <p className="sidebar-footer__text">PDF and text-based sources stay isolated to your account and cited material.</p>
+          {authEnabled ? (
+            <button className="button button--secondary" onClick={signOut} type="button">
+              Sign out
+            </button>
+          ) : null}
         </div>
       </aside>
       <main className="app-shell__content">

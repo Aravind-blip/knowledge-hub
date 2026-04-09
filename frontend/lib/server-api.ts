@@ -1,14 +1,15 @@
-import { cache } from "react";
-
-import type { DocumentListResponse, SessionResponse } from "@/types";
+import type { DocumentListResponse, SessionListResponse, SessionResponse } from "@/types";
+import { getServerAuth } from "@/lib/supabase/server";
 
 const apiBaseUrl = (process.env.API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 async function backendFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const { accessToken, authConfigured } = await getServerAuth();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(authConfigured && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
@@ -20,10 +21,14 @@ async function backendFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export const getDocuments = cache(async (): Promise<DocumentListResponse> => {
+export async function getDocuments(): Promise<DocumentListResponse> {
   return backendFetch<DocumentListResponse>("/api/documents");
-});
+}
 
 export async function getSession(sessionId: string): Promise<SessionResponse> {
   return backendFetch<SessionResponse>(`/api/chat/sessions/${sessionId}`);
+}
+
+export async function getSessions(): Promise<SessionListResponse> {
+  return backendFetch<SessionListResponse>("/api/chat/sessions");
 }

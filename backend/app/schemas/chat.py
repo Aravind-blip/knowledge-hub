@@ -33,6 +33,17 @@ class ChatSessionResponse(BaseModel):
     messages: list[MessageResponse]
 
 
+class ChatSessionSummary(BaseModel):
+    id: UUID
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatSessionListResponse(BaseModel):
+    items: list[ChatSessionSummary]
+
+
 class RetrieveRequest(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
 

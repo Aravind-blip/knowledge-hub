@@ -31,7 +31,7 @@ class IngestionService:
         if not document:
             raise ValueError("Document not found")
 
-        job = IngestionJob(document_id=document.id, status="processing")
+        job = IngestionJob(document_id=document.id, user_id=document.user_id, status="processing")
         session.add(job)
         await session.flush()
 
@@ -75,6 +75,7 @@ class IngestionService:
                 for index, (payload, vector) in enumerate(zip(chunk_payloads, vectors)):
                     session.add(
                         DocumentChunk(
+                            user_id=document.user_id,
                             document_id=document.id,
                             chunk_index=index,
                             content=payload["content"],
@@ -107,6 +108,8 @@ class IngestionService:
                 logger.exception("Document ingestion failed", extra={"document_id": str(document.id)})
                 raise
 
-    async def list_documents(self, session: AsyncSession) -> list[Document]:
-        result = await session.execute(select(Document).order_by(Document.created_at.desc()))
+    async def list_documents(self, session: AsyncSession, user_id: UUID) -> list[Document]:
+        result = await session.execute(
+            select(Document).where(Document.user_id == user_id).order_by(Document.created_at.desc())
+        )
         return list(result.scalars())

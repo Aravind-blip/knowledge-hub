@@ -32,6 +32,7 @@ class RetrievalService:
         session: AsyncSession,
         query: str,
         limit: int,
+        user_id: UUID,
         document_ids: Optional[list[UUID]] = None,
     ) -> RetrievalResult:
         trace_service = get_trace_service()
@@ -50,7 +51,7 @@ class RetrievalService:
             statement: Select[tuple[DocumentChunk, Document]] = (
                 select(DocumentChunk, Document, distance)
                 .join(Document, Document.id == DocumentChunk.document_id)
-                .where(Document.status == "indexed")
+                .where(Document.status == "indexed", Document.user_id == user_id, DocumentChunk.user_id == user_id)
                 .order_by(distance)
                 .limit(limit)
             )

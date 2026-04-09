@@ -22,6 +22,7 @@ async def health_check() -> HealthResponse:
         environment=settings.app_env,
         provider_mode=settings.resolved_generation_provider,
         embedding_provider=settings.resolved_embedding_provider,
+        auth_enabled=settings.require_auth,
         tracing_enabled=settings.langsmith_tracing,
         database_status=database_status,
     )

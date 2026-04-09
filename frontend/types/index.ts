@@ -57,3 +57,14 @@ export type SessionResponse = {
   updated_at: string;
   messages: ChatMessage[];
 };
+
+export type SessionSummary = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SessionListResponse = {
+  items: SessionSummary[];
+};

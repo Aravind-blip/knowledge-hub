@@ -15,12 +15,12 @@ export default async function DocumentsPage() {
       <PageHeader
         eyebrow="Operations"
         title="Indexed files"
-        description="Track uploaded documents, indexing status, and source coverage across the workspace."
+        description="Track your uploaded documents, indexing status, and source coverage inside your account workspace."
       />
       <MetricGrid
         metrics={[
           { label: "Indexed files", value: String(indexedCount), detail: "Files currently available for retrieval." },
-          { label: "Total files", value: String(data.items.length), detail: "Uploaded records across the workspace." },
+          { label: "Total files", value: String(data.items.length), detail: "Uploaded records in your account." },
           { label: "Indexed chunks", value: String(totalChunks), detail: "Searchable source segments stored in Postgres." },
         ]}
       />

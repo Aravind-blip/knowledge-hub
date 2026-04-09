@@ -24,7 +24,7 @@ export default async function SearchPage() {
       />
       <MetricGrid
         metrics={[
-          { label: "Indexed files", value: String(documents.items.length), detail: "Available sources in the current workspace." },
+          { label: "Indexed files", value: String(documents.items.length), detail: "Available sources in your account." },
           { label: "Evidence policy", value: "Strict", detail: "Low-confidence retrieval returns an explicit information gap." },
           { label: "Source format", value: "Cited", detail: "Each result includes file attribution and excerpt text." },
         ]}

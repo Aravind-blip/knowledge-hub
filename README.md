@@ -2,25 +2,27 @@
 
 Knowledge Hub is a full-stack document question-and-answer system for internal operations, policy, and support content. The application indexes uploaded business documents into PostgreSQL with pgvector, retrieves the most relevant evidence for a question, and returns a grounded result with source snippets and file names.
 
-The repo is organized as a monorepo with a Next.js 15 frontend, a FastAPI backend, explicit database migrations, Groq and OpenAI provider support, fallback provider support for local development, and LangSmith tracing that can be enabled through environment variables.
+The repo is organized as a monorepo with a Next.js 15 frontend, a FastAPI backend, explicit database migrations, Supabase Auth for user isolation, Groq and OpenAI provider support, fallback provider support for local development, and LangSmith tracing that can be enabled through environment variables.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A["Business documents"] --> B["FastAPI upload endpoint"]
+    A["Supabase Auth"] --> G["Next.js dashboard"]
+    G --> H["Bearer token to FastAPI"]
+    I["Business documents"] --> B["FastAPI upload endpoint"]
     B --> C["Parser"]
     C --> D["Chunking service"]
     D --> E["Embedding provider"]
     E --> F["PostgreSQL + pgvector"]
-    G["Next.js dashboard"] --> H["Search request"]
-    H --> I["Retrieval service"]
-    I --> F
-    I --> J["LangGraph orchestration"]
-    J --> K["Generation provider"]
-    K --> L["Result with citations"]
-    L --> G
-    J -. optional trace spans .-> M["LangSmith"]
+    H --> J["User-scoped retrieval service"]
+    J --> F
+    J --> K["LangGraph orchestration"]
+    K --> L["Generation provider"]
+    L --> M["Result with citations"]
+    M --> G
+    F -. owner filters and RLS .-> J
+    K -. optional trace spans .-> N["LangSmith"]
 ```
 
 ## Repository Layout
@@ -46,6 +48,7 @@ Key paths:
 
 - Next.js 15 frontend with document list, upload workflow, search workspace, and results view
 - FastAPI backend with async SQLAlchemy models and typed Pydantic responses
+- Supabase Auth-backed sign-in with per-user document and chat isolation
 - Text-based PDF, Markdown, and plain text ingestion
 - Chunking with LangChain text splitters
 - Separate generation and embedding provider abstractions
@@ -55,9 +58,21 @@ Key paths:
 - LangGraph-based retrieval-plus-generation orchestration
 - Grounded answers with cited snippets and source file names
 - Optional LangSmith tracing for ingestion, retrieval, embeddings, generation, and request flows
+- User ownership on documents, chunks, chat sessions, chat messages, and ingestion jobs
+- User-scoped retrieval and API filtering to prevent cross-user access
+- Supabase/Postgres row-level security policies for user-owned records
 - Docker-based local development
 - Alembic migration path for hosted deployment
 - CI workflows for frontend build and backend checks
+
+## Auth and Security Model
+
+- Supabase Auth is the identity provider for deployed multi-user environments.
+- The backend validates each bearer token against Supabase Auth before serving document, retrieval, or chat routes.
+- `documents`, `document_chunks`, `chat_sessions`, `chat_messages`, and `ingestion_jobs` now carry a `user_id`.
+- Backend queries explicitly filter by the authenticated user so retrieval and history stay isolated even before database policies are evaluated.
+- Supabase/Postgres row-level security policies are created for the user-owned tables to mirror the same ownership boundary inside the database.
+- Old shared demo rows are intentionally left with `user_id = NULL` during migration. They become inaccessible to signed-in users until they are re-uploaded or reassigned manually.
 
 ## Provider Configuration
 
@@ -110,6 +125,17 @@ cd ../frontend
 npm install
 ```
 
+### Required Frontend Auth Environment
+
+Set [frontend/.env.local](/Users/aravindbandipelli/Desktop/AravindCode-bot/frontend/.env.local):
+
+```env
+API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
 ### Run PostgreSQL
 
 ```bash
@@ -156,6 +182,7 @@ Use this when you want the app to run without external model credentials.
 Set [backend/.env](/Users/aravindbandipelli/Desktop/AravindCode-bot/backend/.env):
 
 ```env
+REQUIRE_AUTH=false
 GENERATION_PROVIDER=fallback
 EMBEDDING_PROVIDER=fallback
 ALLOW_FALLBACK_MODELS=true
@@ -172,6 +199,37 @@ source .venv/bin/activate
 alembic -c alembic.ini upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
+
+In this mode, the backend uses a single local demo user boundary instead of Supabase Auth so the original secret-free workflow still works on one machine.
+
+## Local Multi-User Auth Mode
+
+Use this when you want the same user-isolated behavior as production.
+
+Set [backend/.env](/Users/aravindbandipelli/Desktop/AravindCode-bot/backend/.env):
+
+```env
+REQUIRE_AUTH=true
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+GENERATION_PROVIDER=groq
+EMBEDDING_PROVIDER=fallback
+ALLOW_FALLBACK_MODELS=true
+GROQ_API_KEY=your_groq_key
+LANGSMITH_TRACING=false
+RUN_DB_MIGRATIONS_ON_STARTUP=false
+```
+
+Set [frontend/.env.local](/Users/aravindbandipelli/Desktop/AravindCode-bot/frontend/.env.local):
+
+```env
+API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+Then run the backend and frontend as normal. Each signed-in user will see only their own uploaded files and chat history.
 
 ## Local Groq Mode
 
@@ -308,7 +366,10 @@ python scripts/seed_demo.py
 - `POST /api/documents/upload`
 - `POST /api/chat/retrieve`
 - `POST /api/chat/ask`
+- `GET /api/chat/sessions`
 - `GET /api/chat/sessions/{session_id}`
+
+All document and chat routes are authenticated when `REQUIRE_AUTH=true`.
 
 ## Common Commands
 
@@ -349,6 +410,9 @@ cd /Users/aravindbandipelli/Desktop/AravindCode-bot/backend
 alembic -c alembic.ini upgrade head
 ```
 
+5. For Supabase deployments, enable auth in the dashboard and make sure email/password sign-in is available.
+6. The auth migration adds `user_id` columns and RLS policies. Existing demo rows remain unowned and are not exposed to signed-in users.
+
 ### Frontend: Vercel
 
 1. Import the repository into Vercel.
@@ -356,6 +420,8 @@ alembic -c alembic.ini upgrade head
 3. Add environment variables:
    - `API_BASE_URL=https://YOUR_BACKEND_HOST`
    - `NEXT_PUBLIC_APP_URL=https://YOUR_VERCEL_HOST`
+   - `NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key`
 4. Deploy.
 
 The repo config is in [vercel.json](/Users/aravindbandipelli/Desktop/AravindCode-bot/vercel.json). Set the Vercel project root directory to `frontend` in the dashboard.
@@ -366,11 +432,14 @@ The repo config is in [vercel.json](/Users/aravindbandipelli/Desktop/AravindCode
 2. Use Docker with [infra/render.yaml](/Users/aravindbandipelli/Desktop/AravindCode-bot/infra/render.yaml).
 3. Set environment variables:
    - `APP_ENV=production`
+   - `REQUIRE_AUTH=true`
    - `GENERATION_PROVIDER=auto`
    - `EMBEDDING_PROVIDER=auto`
    - `ALLOW_FALLBACK_MODELS=true`
    - `GROQ_API_KEY=...`
    - `DATABASE_URL=...`
+   - `SUPABASE_URL=https://YOUR_PROJECT.supabase.co`
+   - `SUPABASE_ANON_KEY=...`
    - `ALLOWED_ORIGINS_RAW=https://YOUR_VERCEL_HOST`
    - `RUN_DB_MIGRATIONS_ON_STARTUP=true`
    - optionally `LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY=...`, `LANGSMITH_PROJECT=knowledge-hub`
@@ -382,11 +451,14 @@ The repo config is in [vercel.json](/Users/aravindbandipelli/Desktop/AravindCode
 2. Use [infra/railway.json](/Users/aravindbandipelli/Desktop/AravindCode-bot/infra/railway.json).
 3. Set environment variables:
    - `APP_ENV=production`
+   - `REQUIRE_AUTH=true`
    - `GENERATION_PROVIDER=auto`
    - `EMBEDDING_PROVIDER=auto`
    - `ALLOW_FALLBACK_MODELS=true`
    - `GROQ_API_KEY=...`
    - `DATABASE_URL=...`
+    - `SUPABASE_URL=https://YOUR_PROJECT.supabase.co`
+    - `SUPABASE_ANON_KEY=...`
    - `ALLOWED_ORIGINS_RAW=https://YOUR_VERCEL_HOST`
    - `RUN_DB_MIGRATIONS_ON_STARTUP=true`
    - optionally `LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY=...`
@@ -398,9 +470,13 @@ For a no-cost public demo:
 - frontend on Vercel
 - backend on Render
 - database on Supabase Postgres
+- auth on Supabase Auth
 - `GENERATION_PROVIDER=auto`
 - `EMBEDDING_PROVIDER=auto`
+- `REQUIRE_AUTH=true`
 - `GROQ_API_KEY=...`
+- `SUPABASE_URL=https://YOUR_PROJECT.supabase.co`
+- `SUPABASE_ANON_KEY=...`
 - leave `OPENAI_API_KEY` empty
 - keep `LANGSMITH_TRACING=false`
 
@@ -413,6 +489,14 @@ For a no-cost public demo:
   - if either provider is `auto`, provide the relevant key or keep `ALLOW_FALLBACK_MODELS=true`
 - If startup fails with a schema error:
   - run `alembic -c alembic.ini upgrade head`
+- If authenticated users cannot see old demo content after migration:
+  - this is expected unless those rows were re-uploaded under a signed-in account
+  - rows with `user_id = NULL` are intentionally hidden by the new ownership model
+- If auth requests fail:
+  - confirm `REQUIRE_AUTH=true` on the backend
+  - confirm `SUPABASE_URL` and `SUPABASE_ANON_KEY` are set on the backend
+  - confirm `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set on the frontend
+  - confirm the frontend is forwarding a bearer token to the backend after sign-in
 - If queries return poor results in fallback mode:
   - switch to OpenAI mode
   - reset and reindex the documents
@@ -430,7 +514,9 @@ For a no-cost public demo:
 ## Production Notes
 
 - The free deployment path uses Groq for chat generation and fallback embeddings by default.
+- Deployed multi-user environments should run with `REQUIRE_AUTH=true` so all document and chat data is user-owned and isolated.
 - Fallback mode still exists to keep the project runnable without secrets. It is not the recommended mode for accuracy-sensitive demos.
+- Local fallback mode uses a single demo user identity so the pre-auth workflow still operates for solo development.
 - OpenAI and LangSmith are fully env-driven. No secrets are stored in the frontend or committed to the repository.
 - The backend now expects an explicit migration path for hosted deployment instead of relying on table auto-creation at startup.
 - OCR is intentionally out of scope for this version. Text-based PDFs, Markdown, and plain text are the supported ingestion formats.

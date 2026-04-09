@@ -12,5 +12,6 @@ def test_health_check() -> None:
     assert payload["environment"] == "development"
     assert payload["provider_mode"] in {"fallback", "openai", "groq"}
     assert payload["embedding_provider"] in {"fallback", "openai"}
+    assert isinstance(payload["auth_enabled"], bool)
     assert isinstance(payload["tracing_enabled"], bool)
     assert payload["database_status"] in {"ready", "unavailable"}

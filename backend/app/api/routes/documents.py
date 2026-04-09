@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import CurrentUser, get_current_user
 from app.core.config import get_settings
 from app.db.session import ensure_schema_ready, get_db_session
 from app.models import Document
@@ -33,15 +34,21 @@ def serialize_document(document: Document) -> DocumentResponse:
 
 
 @router.get("", response_model=DocumentListResponse)
-async def list_documents(session: AsyncSession = Depends(get_db_session)) -> DocumentListResponse:
+async def list_documents(
+    session: AsyncSession = Depends(get_db_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> DocumentListResponse:
     service = IngestionService(DocumentParser(), get_embedding_service())
-    logger.info("Listing documents", extra={"path": "/api/documents", "method": "GET"})
+    logger.info(
+        "Listing documents",
+        extra={"path": "/api/documents", "method": "GET", "user_id": str(current_user.user_id)},
+    )
     try:
-        documents = await service.list_documents(session)
+        documents = await service.list_documents(session, current_user.user_id)
     except (OperationalError, ProgrammingError):
         logger.exception("Document listing failed; verifying database schema")
         await ensure_schema_ready()
-        documents = await service.list_documents(session)
+        documents = await service.list_documents(session, current_user.user_id)
 
     if not documents:
         logger.info("No documents indexed yet", extra={"path": "/api/documents", "method": "GET"})
@@ -63,6 +70,7 @@ async def list_documents(session: AsyncSession = Depends(get_db_session)) -> Doc
 async def upload_document(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_db_session),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> DocumentResponse:
     if file.content_type not in DocumentParser.supported_types:
         raise HTTPException(status_code=400, detail="Unsupported file type. Upload a PDF, TXT, or Markdown file.")
@@ -80,6 +88,7 @@ async def upload_document(
 
     document = Document(
         id=document_id,
+        user_id=current_user.user_id,
         file_name=stored_name,
         original_name=file.filename or stored_name,
         content_type=file.content_type or "application/octet-stream",
@@ -91,7 +100,12 @@ async def upload_document(
     await session.commit()
     logger.info(
         "Document upload accepted",
-        extra={"document_id": str(document.id), "path": "/api/documents/upload", "method": "POST"},
+        extra={
+            "document_id": str(document.id),
+            "path": "/api/documents/upload",
+            "method": "POST",
+            "user_id": str(current_user.user_id),
+        },
     )
 
     service = IngestionService(DocumentParser(), get_embedding_service())
