@@ -1,0 +1,16 @@
+Finance Controls Guide
+
+Invoice intake
+- Accepted invoice formats are PDF and structured CSV exports from approved vendors.
+- Image-only screenshots are not accepted for processing.
+
+Case routing
+- Billing disputes under $250 remain with the support queue.
+- Disputes of $250 or more, chargeback requests, and tax correction cases must be handed to finance.
+
+Review cadence
+- Control documents are reviewed on the first business day of each quarter.
+
+Mailing address
+- Physical returns requiring finance inspection should be sent to 4100 Metric Drive, Suite 220, Austin, TX 78758.
+

@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: knowledge-hub-backend
+    runtime: docker
+    rootDir: .
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: GENERATION_PROVIDER
+        value: auto
+      - key: EMBEDDING_PROVIDER
+        value: auto
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ALLOW_FALLBACK_MODELS
+        value: "true"
+      - key: ALLOWED_ORIGINS_RAW
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: RUN_DB_MIGRATIONS_ON_STARTUP
+        value: "true"
+      - key: LANGSMITH_TRACING
+        sync: false
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        sync: false

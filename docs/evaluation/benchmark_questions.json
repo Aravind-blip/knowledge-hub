@@ -1,0 +1,53 @@
+[
+  {
+    "question": "What are the escalation steps for a late shipment?",
+    "expected_sources": ["operations_playbook.md"],
+    "grounding_terms": ["carrier support desk", "regional operations lead", "48 hours"]
+  },
+  {
+    "question": "What is the password reset turnaround time?",
+    "expected_sources": ["support_policy.md"],
+    "grounding_terms": ["30 minutes", "staffed hours"]
+  },
+  {
+    "question": "Which team owns onboarding exceptions?",
+    "expected_sources": ["support_policy.md"],
+    "grounding_terms": ["Customer Operations team", "Revenue Operations"]
+  },
+  {
+    "question": "When should a case be handed to finance?",
+    "expected_sources": ["finance_controls.txt"],
+    "grounding_terms": ["$250 or more", "chargeback requests", "tax correction cases"]
+  },
+  {
+    "question": "What file formats are accepted for invoices?",
+    "expected_sources": ["finance_controls.txt"],
+    "grounding_terms": ["PDF", "structured CSV"]
+  },
+  {
+    "question": "How long are call recordings retained?",
+    "expected_sources": ["support_policy.md"],
+    "grounding_terms": ["180 days", "support archive"]
+  },
+  {
+    "question": "What is the returns address for finance inspection?",
+    "expected_sources": ["finance_controls.txt"],
+    "grounding_terms": ["4100 Metric Drive", "Austin, TX 78758"]
+  },
+  {
+    "question": "Who approves support policy changes?",
+    "expected_sources": ["support_policy.md"],
+    "grounding_terms": ["Director of Support Operations", "Compliance partner"]
+  },
+  {
+    "question": "What is the SLA for a priority one incident?",
+    "expected_sources": ["operations_playbook.md"],
+    "grounding_terms": ["15 minutes", "30 minutes", "incident owner"]
+  },
+  {
+    "question": "What is the document review cadence for control documents?",
+    "expected_sources": ["finance_controls.txt"],
+    "grounding_terms": ["first business day of each quarter"]
+  }
+]
+
