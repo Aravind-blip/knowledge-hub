@@ -4,12 +4,17 @@ from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 from app.db.base import Base
 
 settings = get_settings()
-engine = create_async_engine(settings.database_url, future=True)
+engine_kwargs = {"future": True}
+if "pooler.supabase.com" in settings.database_url:
+    engine_kwargs["poolclass"] = NullPool
+
+engine = create_async_engine(settings.database_url, **engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 REQUIRED_TABLES = {"documents", "document_chunks", "chat_sessions", "chat_messages", "ingestion_jobs"}
 

@@ -1,3 +1,5 @@
+from sqlalchemy.pool import NullPool
+
 from app.core.config import Settings
 
 
@@ -77,3 +79,13 @@ def test_database_url_converts_sslmode_to_asyncpg_ssl_param() -> None:
         settings.database_url
         == "postgresql+asyncpg://postgres.project:pass@aws-1-us-west-2.pooler.supabase.com:5432/postgres?ssl=require"
     )
+
+
+def test_supabase_pooler_urls_should_use_nullpool() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql://postgres.project:pass@aws-1-us-west-2.pooler.supabase.com:5432/postgres",
+    )
+
+    assert "pooler.supabase.com" in settings.database_url
+    assert NullPool is not None

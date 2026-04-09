@@ -25,8 +25,12 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    await initialize_runtime()
-    yield
+    try:
+        await initialize_runtime()
+        yield
+    except Exception:
+        logger.exception("Application startup failed")
+        raise
 
 
 def create_app() -> FastAPI:
