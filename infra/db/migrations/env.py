@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.db.base import Base
+from app.db.migration_bootstrap import determine_bootstrap_revision
 from app.models import *  # noqa: F403
 
 config = context.config
@@ -20,7 +21,13 @@ if config.config_file_name is not None:
 settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.database_url)
 target_metadata = Base.metadata
-required_tables = {"documents", "document_chunks", "chat_sessions", "chat_messages", "ingestion_jobs"}
+required_tables = {
+    "documents",
+    "document_chunks",
+    "chat_sessions",
+    "chat_messages",
+    "ingestion_jobs",
+}
 
 
 def run_migrations_offline() -> None:
@@ -50,14 +57,25 @@ def bootstrap_legacy_schema(connection) -> bool:
     if not required_tables.issubset(table_names) or "alembic_version" in table_names:
         return False
 
-    head_revision = ScriptDirectory.from_config(config).get_current_head()
+    inspector = inspect(connection)
+
+    def has_column(table_name: str, column_name: str) -> bool:
+        return any(column["name"] == column_name for column in inspector.get_columns(table_name, schema="public"))
+
+    revision = determine_bootstrap_revision(
+        table_names=table_names,
+        has_column=has_column,
+        head_revision=ScriptDirectory.from_config(config).get_current_head(),
+    )
+
     connection.execute(text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"))
     connection.execute(text("DELETE FROM alembic_version"))
     connection.execute(
         text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
-        {"revision": head_revision},
+        {"revision": revision},
     )
     return True
+
 
 
 async def run_migrations_online() -> None:

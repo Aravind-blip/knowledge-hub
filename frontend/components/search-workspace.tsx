@@ -56,7 +56,7 @@ export function SearchWorkspace({
         <div className="panel__header">
           <div>
             <h2>{initialSession ? `Continue: ${sessionTitle}` : "Search answers"}</h2>
-            <p>Responses are generated only from indexed files. If the evidence is weak, the system returns a clear information gap.</p>
+            <p>Responses are generated only from indexed organization files. If the evidence is weak, the system returns a clear information gap.</p>
           </div>
         </div>
         <div className="guidance-card">
@@ -98,7 +98,7 @@ export function SearchWorkspace({
             <p>
               {initialSession
                 ? `Session opened ${formatDate(initialSession.created_at)}`
-                : "Upload reference material first, then ask specific questions about policy, support, or operations content."}
+                : "Upload organization reference material first, then ask specific questions about policy, support, or operations content."}
             </p>
           </div>
         </div>

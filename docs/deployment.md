@@ -28,6 +28,9 @@ alembic -c alembic.ini upgrade head
 - `APP_ENV=production`
 - `ALLOWED_ORIGINS_RAW=https://YOUR_VERCEL_HOST`
 - `DATABASE_URL=...`
+- `REQUIRE_AUTH=true`
+- `SUPABASE_URL=https://YOUR_PROJECT.supabase.co`
+- `SUPABASE_ANON_KEY=...`
 - `GENERATION_PROVIDER=auto`
 - `EMBEDDING_PROVIDER=auto`
 - `ALLOW_FALLBACK_MODELS=true`
@@ -54,6 +57,8 @@ For the free public deployment path, use:
 - Environment variables:
   - `API_BASE_URL=https://YOUR_BACKEND_HOST`
   - `NEXT_PUBLIC_APP_URL=https://YOUR_VERCEL_HOST`
+  - `NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY=...`
 - Repo config: [vercel.json](/Users/aravindbandipelli/Desktop/AravindCode-bot/vercel.json)
 - Set the Vercel project root directory to `frontend` in the project settings
 
@@ -73,6 +78,8 @@ For the free public deployment path, use:
 After deployment:
 
 1. Hit `GET /api/health`
-2. Upload a demo document
-3. Ask a question against the uploaded content
-4. If LangSmith is enabled, confirm new runs appear in the configured project
+2. Sign in through Supabase Auth
+3. Upload a demo document
+4. Ask a question against the uploaded content
+5. Confirm the workspace summary loads quality/performance metrics or the expected `Run evals` / `Run tests` placeholders
+6. If LangSmith is enabled, confirm new runs appear in the configured project

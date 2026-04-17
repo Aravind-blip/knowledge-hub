@@ -8,10 +8,9 @@ export default function UploadPage() {
       <PageHeader
         eyebrow="Ingestion"
         title="Upload documents"
-        description="Add policy, support, or operations files. Accepted formats: PDF, TXT, and Markdown."
+        description="Add policy, support, or operations files to the current organization workspace. Accepted formats: PDF, TXT, and Markdown."
       />
       <UploadForm />
     </section>
   );
 }
-

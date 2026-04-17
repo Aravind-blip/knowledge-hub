@@ -18,11 +18,24 @@ if "pooler.supabase.com" in settings.database_url:
 
 engine = create_async_engine(settings.database_url, **engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-REQUIRED_TABLES = {"documents", "document_chunks", "chat_sessions", "chat_messages", "ingestion_jobs"}
+REQUIRED_TABLES = {
+    "organizations",
+    "organization_members",
+    "documents",
+    "document_chunks",
+    "chat_sessions",
+    "chat_messages",
+    "ingestion_jobs",
+}
+
+
+async def get_unscoped_db_session() -> AsyncGenerator[AsyncSession, None]:
+    async with SessionLocal() as session:
+        yield session
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    async with SessionLocal() as session:
+    async for session in get_unscoped_db_session():
         yield session
 
 

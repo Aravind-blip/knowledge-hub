@@ -1,28 +1,30 @@
 # Knowledge Hub
 
-Knowledge Hub is a full-stack document question-and-answer system for internal operations, policy, and support content. The application indexes uploaded business documents into PostgreSQL with pgvector, retrieves the most relevant evidence for a question, and returns a grounded result with source snippets and file names.
+Knowledge Hub is a full-stack enterprise document question-and-answer system for internal operations, policy, and support content. The application indexes uploaded business documents into PostgreSQL with pgvector, isolates every request inside an authenticated organization workspace, retrieves the most relevant evidence for a question, and returns a grounded result with source snippets and file names.
 
-The repo is organized as a monorepo with a Next.js 15 frontend, a FastAPI backend, explicit database migrations, Supabase Auth for user isolation, Groq and OpenAI provider support, fallback provider support for local development, and LangSmith tracing that can be enabled through environment variables.
+The repo is organized as a monorepo with a Next.js 15 frontend, a FastAPI backend, explicit database migrations, Supabase Auth for organization-scoped access, Groq and OpenAI provider support, fallback provider support for local development, and optional evaluation and load-testing workflows for measurable quality and performance reporting.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A["Supabase Auth"] --> G["Next.js dashboard"]
+    A["Supabase Auth"] --> G["Next.js workspace"]
     G --> H["Bearer token to FastAPI"]
-    I["Business documents"] --> B["FastAPI upload endpoint"]
+    H --> I["Current org + role resolver"]
+    J["Business documents"] --> B["FastAPI upload endpoint"]
     B --> C["Parser"]
     C --> D["Chunking service"]
     D --> E["Embedding provider"]
     E --> F["PostgreSQL + pgvector"]
-    H --> J["User-scoped retrieval service"]
-    J --> F
-    J --> K["LangGraph orchestration"]
-    K --> L["Generation provider"]
-    L --> M["Result with citations"]
-    M --> G
-    F -. owner filters and RLS .-> J
-    K -. optional trace spans .-> N["LangSmith"]
+    I --> K["Organization-scoped retrieval service"]
+    K --> F
+    K --> L["LangGraph orchestration"]
+    L --> M["Generation provider"]
+    M --> N["Result with citations"]
+    N --> G
+    F -. app.current_organization_id and RLS .-> K
+    O["Eval + load artifacts"] --> G
+    L -. optional trace spans .-> P["LangSmith"]
 ```
 
 ## Repository Layout
@@ -48,7 +50,7 @@ Key paths:
 
 - Next.js 15 frontend with document list, upload workflow, search workspace, and results view
 - FastAPI backend with async SQLAlchemy models and typed Pydantic responses
-- Supabase Auth-backed sign-in with per-user document and chat isolation
+- Supabase Auth-backed sign-in with authenticated organization workspaces
 - Text-based PDF, Markdown, and plain text ingestion
 - Chunking with LangChain text splitters
 - Separate generation and embedding provider abstractions
@@ -58,21 +60,28 @@ Key paths:
 - LangGraph-based retrieval-plus-generation orchestration
 - Grounded answers with cited snippets and source file names
 - Optional LangSmith tracing for ingestion, retrieval, embeddings, generation, and request flows
-- User ownership on documents, chunks, chat sessions, chat messages, and ingestion jobs
-- User-scoped retrieval and API filtering to prevent cross-user access
-- Supabase/Postgres row-level security policies for user-owned records
+- Organization and membership model with `organizations` and `organization_members`
+- Organization ownership on documents, chunks, chat sessions, chat messages, and ingestion jobs
+- Organization-scoped retrieval and API filtering to prevent cross-organization access
+- Supabase/Postgres row-level security policies driven by request-scoped organization context
+- Automated retrieval and answer evaluation with JSONL datasets and artifact output
+- k6-based load testing for listing, ask/search, and optional upload workflows
+- Metric-focused workspace summary cards for retrieval quality, fallback precision, and latency
 - Docker-based local development
 - Alembic migration path for hosted deployment
 - CI workflows for frontend build and backend checks
 
-## Auth and Security Model
+## Auth, Organizations, and Security Model
 
-- Supabase Auth is the identity provider for deployed multi-user environments.
-- The backend validates each bearer token against Supabase Auth before serving document, retrieval, or chat routes.
-- `documents`, `document_chunks`, `chat_sessions`, `chat_messages`, and `ingestion_jobs` now carry a `user_id`.
-- Backend queries explicitly filter by the authenticated user so retrieval and history stay isolated even before database policies are evaluated.
-- Supabase/Postgres row-level security policies are created for the user-owned tables to mirror the same ownership boundary inside the database.
-- Old shared demo rows are intentionally left with `user_id = NULL` during migration. They become inaccessible to signed-in users until they are re-uploaded or reassigned manually.
+- Supabase Auth is the identity provider for deployed environments.
+- Each authenticated user is resolved to an organization membership before any document, retrieval, or chat query runs.
+- The backend auto-provisions a default organization and admin membership for a first-time sign-in so local and hosted setup stay simple.
+- `documents`, `document_chunks`, `chat_sessions`, `chat_messages`, and `ingestion_jobs` now carry both `organization_id` and `user_id`.
+- `organization_id` is the hard isolation boundary for retrieval, document access, citations, and workspace activity.
+- `user_id` is retained for uploader attribution and per-user chat history inside an organization.
+- Backend queries explicitly filter by the current organization, and chat history also filters by the current user.
+- Postgres row-level security policies use request-scoped session variables (`app.current_organization_id`, `app.current_user_id`, `app.current_role`) so the database enforces the same organization boundary as the application.
+- Old shared demo rows are backfilled into a single default demo organization. Existing rows remain visible only inside that demo organization until they are reassigned or re-uploaded.
 
 ## Provider Configuration
 
@@ -135,6 +144,29 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
+
+### Exact Supabase Auth Setup
+
+1. In Supabase, enable Email/Password sign-in under `Authentication -> Providers`.
+2. Copy the project URL and anon key from `Settings -> API`.
+3. Set backend auth env values:
+
+```env
+REQUIRE_AUTH=true
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+4. Set frontend auth env values:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+5. Run `alembic -c alembic.ini upgrade head`.
+6. Start the backend and frontend.
+7. Create an account on `/login`. The backend will provision a default organization membership on the first authenticated request.
 
 ### Run PostgreSQL
 
@@ -202,9 +234,9 @@ uvicorn app.main:app --reload --port 8000
 
 In this mode, the backend uses a single local demo user boundary instead of Supabase Auth so the original secret-free workflow still works on one machine.
 
-## Local Multi-User Auth Mode
+## Local Organization Auth Mode
 
-Use this when you want the same user-isolated behavior as production.
+Use this when you want the same organization-scoped behavior as production.
 
 Set [backend/.env](/Users/aravindbandipelli/Desktop/AravindCode-bot/backend/.env):
 
@@ -229,7 +261,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-Then run the backend and frontend as normal. Each signed-in user will see only their own uploaded files and chat history.
+Then run the backend and frontend as normal. Each signed-in user will be provisioned into a default organization workspace, and all document, retrieval, citation, and chat activity will stay inside that organization boundary.
 
 ## Local Groq Mode
 
@@ -325,7 +357,7 @@ python scripts/verify_langsmith_tracing.py
 
 Then perform a normal upload or search request and confirm runs appear in your LangSmith project.
 
-## Verification Scripts
+## Verification, Evaluation, and Load Testing
 
 Groq generation verification:
 
@@ -348,7 +380,45 @@ Evaluation script:
 ```bash
 cd /Users/aravindbandipelli/Desktop/AravindCode-bot/backend
 source .venv/bin/activate
-python scripts/eval.py
+python scripts/run_evals.py --base-url http://localhost:8000 --output ../artifacts/evals/latest.json
+```
+
+Optional protected-environment evaluation:
+
+```bash
+cd /Users/aravindbandipelli/Desktop/AravindCode-bot/backend
+source .venv/bin/activate
+python scripts/run_evals.py \
+  --base-url https://YOUR_BACKEND_HOST \
+  --bearer-token YOUR_SUPABASE_ACCESS_TOKEN \
+  --output ../artifacts/evals/latest.json
+```
+
+Load testing with k6:
+
+```bash
+cd /Users/aravindbandipelli/Desktop/AravindCode-bot
+k6 run -e BASE_URL=http://localhost:8000 tests/load/knowledge_hub.js
+```
+
+Authenticated load testing:
+
+```bash
+cd /Users/aravindbandipelli/Desktop/AravindCode-bot
+k6 run \
+  -e BASE_URL=https://YOUR_BACKEND_HOST \
+  -e K6_BEARER_TOKEN=YOUR_SUPABASE_ACCESS_TOKEN \
+  tests/load/knowledge_hub.js
+```
+
+Optional upload/index scenario:
+
+```bash
+cd /Users/aravindbandipelli/Desktop/AravindCode-bot
+k6 run \
+  -e BASE_URL=http://localhost:8000 \
+  -e ENABLE_UPLOAD=true \
+  tests/load/knowledge_hub.js
 ```
 
 Demo data seed:
@@ -362,8 +432,12 @@ python scripts/seed_demo.py
 ## API Surface
 
 - `GET /api/health`
+- `GET /api/workspace/summary`
 - `GET /api/documents`
+- `GET /api/documents/{document_id}`
 - `POST /api/documents/upload`
+- `POST /api/documents/{document_id}/reindex`
+- `DELETE /api/documents/{document_id}`
 - `POST /api/chat/retrieve`
 - `POST /api/chat/ask`
 - `GET /api/chat/sessions`
@@ -410,8 +484,9 @@ cd /Users/aravindbandipelli/Desktop/AravindCode-bot/backend
 alembic -c alembic.ini upgrade head
 ```
 
-5. For Supabase deployments, enable auth in the dashboard and make sure email/password sign-in is available.
-6. The auth migration adds `user_id` columns and RLS policies. Existing demo rows remain unowned and are not exposed to signed-in users.
+5. For Supabase deployments, enable Auth in the dashboard and make sure email/password sign-in is available.
+6. Run the organization-scoping migrations so `organizations`, `organization_members`, and `organization_id` columns exist before enabling `REQUIRE_AUTH=true`.
+7. The organization migration backfills old shared rows into a default demo organization. Re-upload or reassign those rows if you want them visible inside a new authenticated organization.
 
 ### Frontend: Vercel
 
@@ -490,8 +565,8 @@ For a no-cost public demo:
 - If startup fails with a schema error:
   - run `alembic -c alembic.ini upgrade head`
 - If authenticated users cannot see old demo content after migration:
-  - this is expected unless those rows were re-uploaded under a signed-in account
-  - rows with `user_id = NULL` are intentionally hidden by the new ownership model
+  - this is expected unless those rows were re-uploaded under the new organization workspace
+  - old shared rows are backfilled into the default demo organization and are not automatically reassigned to new org memberships
 - If auth requests fail:
   - confirm `REQUIRE_AUTH=true` on the backend
   - confirm `SUPABASE_URL` and `SUPABASE_ANON_KEY` are set on the backend
@@ -514,9 +589,9 @@ For a no-cost public demo:
 ## Production Notes
 
 - The free deployment path uses Groq for chat generation and fallback embeddings by default.
-- Deployed multi-user environments should run with `REQUIRE_AUTH=true` so all document and chat data is user-owned and isolated.
+- Deployed organization environments should run with `REQUIRE_AUTH=true` so all document and chat data is organization-scoped and isolated.
 - Fallback mode still exists to keep the project runnable without secrets. It is not the recommended mode for accuracy-sensitive demos.
-- Local fallback mode uses a single demo user identity so the pre-auth workflow still operates for solo development.
+- Local fallback mode uses a single demo organization identity so the pre-auth workflow still operates for solo development.
 - OpenAI and LangSmith are fully env-driven. No secrets are stored in the frontend or committed to the repository.
 - The backend now expects an explicit migration path for hosted deployment instead of relying on table auto-creation at startup.
 - OCR is intentionally out of scope for this version. Text-based PDFs, Markdown, and plain text are the supported ingestion formats.

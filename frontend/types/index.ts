@@ -68,3 +68,25 @@ export type SessionSummary = {
 export type SessionListResponse = {
   items: SessionSummary[];
 };
+
+export type MetricCard = {
+  label: string;
+  value: string;
+  detail: string;
+};
+
+export type OrganizationActivity = {
+  total_documents: number;
+  indexed_documents: number;
+  recent_uploads: number;
+  session_count: number;
+};
+
+export type WorkspaceSummary = {
+  organization_name: string;
+  organization_slug: string;
+  role: string;
+  activity: OrganizationActivity;
+  quality_metrics: MetricCard[];
+  performance_metrics: MetricCard[];
+};

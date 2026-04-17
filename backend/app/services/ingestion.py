@@ -1,8 +1,9 @@
 import logging
 from pathlib import Path
+from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Document, DocumentChunk, IngestionJob
@@ -31,7 +32,12 @@ class IngestionService:
         if not document:
             raise ValueError("Document not found")
 
-        job = IngestionJob(document_id=document.id, user_id=document.user_id, status="processing")
+        job = IngestionJob(
+            organization_id=document.organization_id,
+            document_id=document.id,
+            user_id=document.user_id,
+            status="processing",
+        )
         session.add(job)
         await session.flush()
 
@@ -75,6 +81,7 @@ class IngestionService:
                 for index, (payload, vector) in enumerate(zip(chunk_payloads, vectors)):
                     session.add(
                         DocumentChunk(
+                            organization_id=document.organization_id,
                             user_id=document.user_id,
                             document_id=document.id,
                             chunk_index=index,
@@ -108,8 +115,27 @@ class IngestionService:
                 logger.exception("Document ingestion failed", extra={"document_id": str(document.id)})
                 raise
 
-    async def list_documents(self, session: AsyncSession, user_id: UUID) -> list[Document]:
+    async def list_documents(self, session: AsyncSession, organization_id: UUID) -> list[Document]:
         result = await session.execute(
-            select(Document).where(Document.user_id == user_id).order_by(Document.created_at.desc())
+            select(Document).where(Document.organization_id == organization_id).order_by(Document.created_at.desc())
         )
         return list(result.scalars())
+
+    async def get_document(
+        self, session: AsyncSession, document_id: UUID, organization_id: UUID
+    ) -> Optional[Document]:
+        result = await session.execute(
+            select(Document).where(Document.id == document_id, Document.organization_id == organization_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def delete_document(self, session: AsyncSession, document: Document) -> None:
+        await session.delete(document)
+        await session.commit()
+
+    async def reindex_document(self, session: AsyncSession, document: Document, file_path: Path) -> Document:
+        await session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
+        document.status = "processing"
+        document.metadata_json = {}
+        await session.commit()
+        return await self.ingest_document(session, document.id, file_path, document.content_type)

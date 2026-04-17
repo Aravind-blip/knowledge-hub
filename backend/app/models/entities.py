@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,11 +15,59 @@ from app.db.base import Base
 settings = get_settings()
 
 
-class Document(Base):
-    __tablename__ = "documents"
-    __table_args__ = (Index("ix_documents_user_id_created_at", "user_id", "created_at"),)
+class Organization(Base):
+    __tablename__ = "organizations"
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_organizations_slug"),
+        Index("ix_organizations_created_at", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    members: Mapped[list["OrganizationMember"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+    documents: Mapped[list["Document"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+    chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+    chat_messages: Mapped[list["ChatMessage"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+    ingestion_jobs: Mapped[list["IngestionJob"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+
+
+class OrganizationMember(Base):
+    __tablename__ = "organization_members"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", name="uq_organization_members_org_user"),
+        Index("ix_organization_members_user_id", "user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), default="member", nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    organization: Mapped[Organization] = relationship(back_populates="members")
+
+
+class Document(Base):
+    __tablename__ = "documents"
+    __table_args__ = (
+        Index("ix_documents_org_id_created_at", "organization_id", "created_at"),
+        Index("ix_documents_org_id_status_created_at", "organization_id", "status", "created_at"),
+        Index("ix_documents_user_id_created_at", "user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     original_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -30,14 +78,21 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
+    organization: Mapped[Organization] = relationship(back_populates="documents")
     chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 
 
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
-    __table_args__ = (Index("ix_document_chunks_user_id_document_id", "user_id", "document_id"),)
+    __table_args__ = (
+        Index("ix_document_chunks_org_id_document_id", "organization_id", "document_id"),
+        Index("ix_document_chunks_user_id_document_id", "user_id", "document_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -48,27 +103,42 @@ class DocumentChunk(Base):
     metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+    organization: Mapped[Organization] = relationship(back_populates="chunks")
     document: Mapped[Document] = relationship(back_populates="chunks")
 
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
-    __table_args__ = (Index("ix_chat_sessions_user_id_updated_at", "user_id", "updated_at"),)
+    __table_args__ = (
+        Index("ix_chat_sessions_org_id_updated_at", "organization_id", "updated_at"),
+        Index("ix_chat_sessions_org_id_user_id_updated_at", "organization_id", "user_id", "updated_at"),
+        Index("ix_chat_sessions_user_id_updated_at", "user_id", "updated_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     title: Mapped[str] = mapped_column(String(255), default="New session", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
+    organization: Mapped[Organization] = relationship(back_populates="chat_sessions")
     messages: Mapped[list["ChatMessage"]] = relationship(back_populates="session", cascade="all, delete-orphan")
 
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
-    __table_args__ = (Index("ix_chat_messages_user_id_session_id", "user_id", "session_id"),)
+    __table_args__ = (
+        Index("ix_chat_messages_org_id_session_id_created_at", "organization_id", "session_id", "created_at"),
+        Index("ix_chat_messages_user_id_session_id", "user_id", "session_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -77,14 +147,21 @@ class ChatMessage(Base):
     metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+    organization: Mapped[Organization] = relationship(back_populates="chat_messages")
     session: Mapped[ChatSession] = relationship(back_populates="messages")
 
 
 class IngestionJob(Base):
     __tablename__ = "ingestion_jobs"
-    __table_args__ = (Index("ix_ingestion_jobs_user_id_created_at", "user_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_ingestion_jobs_org_id_created_at", "organization_id", "created_at"),
+        Index("ix_ingestion_jobs_user_id_created_at", "user_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     document_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(40), default="queued", nullable=False)
@@ -92,3 +169,5 @@ class IngestionJob(Base):
     metrics_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    organization: Mapped[Organization] = relationship(back_populates="ingestion_jobs")

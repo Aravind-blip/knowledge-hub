@@ -1,13 +1,17 @@
 import asyncio
+import os
 from pathlib import Path
 
 import httpx
 
 DEMO_DATA_DIR = Path(__file__).resolve().parents[2] / "docs" / "demo-data"
+DEFAULT_BASE_URL = os.getenv("KNOWLEDGE_HUB_BASE_URL", "http://localhost:8000")
+BEARER_TOKEN = os.getenv("KNOWLEDGE_HUB_BEARER_TOKEN")
 
 
 async def main() -> None:
-    async with httpx.AsyncClient(base_url="http://localhost:8000", timeout=120.0) as client:
+    headers = {"Authorization": f"Bearer {BEARER_TOKEN}"} if BEARER_TOKEN else None
+    async with httpx.AsyncClient(base_url=DEFAULT_BASE_URL.rstrip("/"), timeout=120.0, headers=headers) as client:
         for path in sorted(DEMO_DATA_DIR.glob("*")):
             if path.suffix.lower() not in {".md", ".txt", ".pdf"}:
                 continue
@@ -28,4 +32,3 @@ def content_type_for(suffix: str) -> str:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

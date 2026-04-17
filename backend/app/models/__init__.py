@@ -1,4 +1,19 @@
-from app.models.entities import ChatMessage, ChatSession, Document, DocumentChunk, IngestionJob
+from app.models.entities import (
+    ChatMessage,
+    ChatSession,
+    Document,
+    DocumentChunk,
+    IngestionJob,
+    Organization,
+    OrganizationMember,
+)
 
-__all__ = ["Document", "DocumentChunk", "ChatSession", "ChatMessage", "IngestionJob"]
-
+__all__ = [
+    "Organization",
+    "OrganizationMember",
+    "Document",
+    "DocumentChunk",
+    "ChatSession",
+    "ChatMessage",
+    "IngestionJob",
+]

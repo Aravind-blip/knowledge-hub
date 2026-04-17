@@ -47,7 +47,7 @@ export function UploadForm() {
       <div className="panel__header">
         <div>
           <h2>Upload documents</h2>
-          <p>Upload text-based PDF, text, or Markdown documents. Image-only files are not processed in this MVP.</p>
+          <p>Upload text-based PDF, text, or Markdown documents for the current organization workspace. Image-only files are not processed in this MVP.</p>
         </div>
       </div>
       <label className="upload-dropzone">
@@ -71,7 +71,7 @@ export function UploadForm() {
       {state?.success ? <div className="callout callout--success">{state.success}</div> : null}
       {state?.error ? <div className="callout callout--error">{state.error}</div> : null}
       {!mutation.isPending && !state ? (
-        <div className="callout callout--subtle">No files uploaded yet. Select a document to begin indexing.</div>
+        <div className="callout callout--subtle">No files uploaded yet. Select a document to begin indexing for this organization.</div>
       ) : null}
     </div>
   );

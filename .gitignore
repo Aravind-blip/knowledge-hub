@@ -18,3 +18,7 @@ backend/data/uploads/
 dist/
 build/
 *.swp
+artifacts/evals/*.json
+artifacts/load/*.json
+!artifacts/evals/.gitkeep
+!artifacts/load/.gitkeep

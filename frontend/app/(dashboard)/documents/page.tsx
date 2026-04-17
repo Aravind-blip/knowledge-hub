@@ -2,32 +2,24 @@ import { DocumentsTable } from "@/components/documents-table";
 import { EmptyState } from "@/components/empty-state";
 import { MetricGrid } from "@/components/metric-grid";
 import { PageHeader } from "@/components/page-header";
-import { getDocuments } from "@/lib/server-api";
+import { getDocuments, getWorkspaceSummary } from "@/lib/server-api";
 
 
 export default async function DocumentsPage() {
-  const data = await getDocuments();
-  const indexedCount = data.items.filter((item) => item.status === "indexed").length;
-  const totalChunks = data.items.reduce((sum, item) => sum + Number(item.metadata?.chunk_count ?? 0), 0);
+  const [data, workspace] = await Promise.all([getDocuments(), getWorkspaceSummary()]);
 
   return (
     <section className="page">
       <PageHeader
         eyebrow="Operations"
         title="Indexed files"
-        description="Track your uploaded documents, indexing status, and source coverage inside your account workspace."
+        description={`Track organization documents, indexing status, and operational readiness inside ${workspace.organization_name}.`}
       />
-      <MetricGrid
-        metrics={[
-          { label: "Indexed files", value: String(indexedCount), detail: "Files currently available for retrieval." },
-          { label: "Total files", value: String(data.items.length), detail: "Uploaded records in your account." },
-          { label: "Indexed chunks", value: String(totalChunks), detail: "Searchable source segments stored in Postgres." },
-        ]}
-      />
+      <MetricGrid metrics={workspace.performance_metrics} />
       {data.items.length === 0 ? (
         <EmptyState
           title="No files indexed yet"
-          description="Upload a source document to start building a searchable reference workspace."
+          description="Upload a source document to start building a searchable organization knowledge workspace."
           actionHref="/documents/upload"
           actionLabel="Upload documents"
         />

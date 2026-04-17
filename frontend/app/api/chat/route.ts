@@ -1,6 +1,6 @@
 import { getServerAuth } from "@/lib/supabase/server";
 
-const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+const apiBaseUrl = (process.env.API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 
 export async function POST(request: Request) {

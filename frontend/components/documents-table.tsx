@@ -10,7 +10,7 @@ export function DocumentsTable({ documents }: { documents: DocumentRecord[] }) {
       <div className="panel__header">
         <div>
           <h2>Indexed files</h2>
-          <p>Current document inventory, file coverage, and indexing status.</p>
+          <p>Current organization document inventory, source coverage, and indexing status.</p>
         </div>
         <Link className="button button--secondary" href="/documents/upload">
           Upload documents

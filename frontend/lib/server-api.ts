@@ -1,4 +1,4 @@
-import type { DocumentListResponse, SessionListResponse, SessionResponse } from "@/types";
+import type { DocumentListResponse, SessionListResponse, SessionResponse, WorkspaceSummary } from "@/types";
 import { getServerAuth } from "@/lib/supabase/server";
 
 const apiBaseUrl = (process.env.API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
@@ -31,4 +31,8 @@ export async function getSession(sessionId: string): Promise<SessionResponse> {
 
 export async function getSessions(): Promise<SessionListResponse> {
   return backendFetch<SessionListResponse>("/api/chat/sessions");
+}
+
+export async function getWorkspaceSummary(): Promise<WorkspaceSummary> {
+  return backendFetch<WorkspaceSummary>("/api/workspace/summary");
 }

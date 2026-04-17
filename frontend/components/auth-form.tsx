@@ -49,7 +49,7 @@ export function AuthForm() {
       <div className="panel__header">
         <div>
           <h2>{mode === "signin" ? "Sign in" : "Create account"}</h2>
-          <p>Each account gets its own document workspace, retrieval index, and chat history.</p>
+          <p>Each sign-in session is attached to an organization workspace with isolated documents, retrieval, and history.</p>
         </div>
       </div>
       <form className="ask-form" onSubmit={onSubmit}>

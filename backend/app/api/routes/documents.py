@@ -1,14 +1,15 @@
 import logging
 import uuid
 from pathlib import Path
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import CurrentUser, get_current_user
+from app.core.auth import CurrentUser, get_current_user, get_request_db_session, require_org_admin
 from app.core.config import get_settings
-from app.db.session import ensure_schema_ready, get_db_session
+from app.db.session import ensure_schema_ready
 from app.models import Document
 from app.schemas.documents import DocumentListResponse, DocumentResponse
 from app.services.embeddings import get_embedding_service
@@ -35,7 +36,7 @@ def serialize_document(document: Document) -> DocumentResponse:
 
 @router.get("", response_model=DocumentListResponse)
 async def list_documents(
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_request_db_session),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> DocumentListResponse:
     service = IngestionService(DocumentParser(), get_embedding_service())
@@ -44,11 +45,11 @@ async def list_documents(
         extra={"path": "/api/documents", "method": "GET", "user_id": str(current_user.user_id)},
     )
     try:
-        documents = await service.list_documents(session, current_user.user_id)
+        documents = await service.list_documents(session, current_user.organization_id)
     except (OperationalError, ProgrammingError):
         logger.exception("Document listing failed; verifying database schema")
         await ensure_schema_ready()
-        documents = await service.list_documents(session, current_user.user_id)
+        documents = await service.list_documents(session, current_user.organization_id)
 
     if not documents:
         logger.info("No documents indexed yet", extra={"path": "/api/documents", "method": "GET"})
@@ -69,7 +70,7 @@ async def list_documents(
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     file: UploadFile = File(...),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_request_db_session),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> DocumentResponse:
     if file.content_type not in DocumentParser.supported_types:
@@ -88,6 +89,7 @@ async def upload_document(
 
     document = Document(
         id=document_id,
+        organization_id=current_user.organization_id,
         user_id=current_user.user_id,
         file_name=stored_name,
         original_name=file.filename or stored_name,
@@ -110,4 +112,49 @@ async def upload_document(
 
     service = IngestionService(DocumentParser(), get_embedding_service())
     indexed_document = await service.ingest_document(session, document.id, target_path, document.content_type)
+    return serialize_document(indexed_document)
+
+
+@router.get("/{document_id}", response_model=DocumentResponse)
+async def get_document(
+    document_id: UUID,
+    session: AsyncSession = Depends(get_request_db_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> DocumentResponse:
+    service = IngestionService(DocumentParser(), get_embedding_service())
+    document = await service.get_document(session, document_id, current_user.organization_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return serialize_document(document)
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: UUID,
+    session: AsyncSession = Depends(get_request_db_session),
+    current_user: CurrentUser = Depends(require_org_admin),
+) -> None:
+    service = IngestionService(DocumentParser(), get_embedding_service())
+    document = await service.get_document(session, document_id, current_user.organization_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    await service.delete_document(session, document)
+
+
+@router.post("/{document_id}/reindex", response_model=DocumentResponse)
+async def reindex_document(
+    document_id: UUID,
+    session: AsyncSession = Depends(get_request_db_session),
+    current_user: CurrentUser = Depends(require_org_admin),
+) -> DocumentResponse:
+    service = IngestionService(DocumentParser(), get_embedding_service())
+    document = await service.get_document(session, document_id, current_user.organization_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    file_path = settings.upload_dir / document.file_name
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Stored file is not available for reindexing.")
+
+    indexed_document = await service.reindex_document(session, document, file_path)
     return serialize_document(indexed_document)

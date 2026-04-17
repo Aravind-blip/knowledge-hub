@@ -13,7 +13,7 @@ export default async function HistoryPage() {
       <PageHeader
         eyebrow="History"
         title="Chat history"
-        description="Review previous sessions that belong to your account and reopen any answer thread."
+        description="Review previous sessions that belong to your organization workspace and reopen any answer thread you own."
       />
       {data.items.length === 0 ? (
         <EmptyState

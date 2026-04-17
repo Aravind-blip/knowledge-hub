@@ -20,10 +20,14 @@ export function DashboardShell({
   children,
   userEmail,
   authEnabled,
+  organizationName,
+  role,
 }: {
   children: ReactNode;
   userEmail: string | null;
   authEnabled: boolean;
+  organizationName: string | null;
+  role: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -46,8 +50,11 @@ export function DashboardShell({
           </div>
         </div>
         <div className="sidebar-panel">
-          <p className="sidebar-panel__title">{authEnabled ? "Workspace owner" : "Workspace mode"}</p>
-          <p className="sidebar-panel__text">{authEnabled ? userEmail ?? "Signed-in user" : "Local demo user"}</p>
+          <p className="sidebar-panel__title">{authEnabled ? "Organization workspace" : "Workspace mode"}</p>
+          <p className="sidebar-panel__text">
+            {authEnabled ? organizationName ?? "Provisioning workspace" : "Local demo workspace"}
+          </p>
+          {authEnabled ? <p className="sidebar-panel__text">{userEmail ?? "Signed-in user"} · {role ?? "member"}</p> : null}
         </div>
         <nav className="nav">
           {navItems.map((item) => (
@@ -65,7 +72,9 @@ export function DashboardShell({
         </nav>
         <div className="sidebar-footer">
           <p className="sidebar-footer__label">Coverage</p>
-          <p className="sidebar-footer__text">PDF and text-based sources stay isolated to your account and cited material.</p>
+          <p className="sidebar-footer__text">
+            PDF and text-based sources stay isolated to your organization and tied to cited material.
+          </p>
           {authEnabled ? (
             <button className="button button--secondary" onClick={signOut} type="button">
               Sign out
@@ -77,9 +86,9 @@ export function DashboardShell({
         <div className="content-chrome">
           <div className="content-chrome__title-group">
             <p className="content-chrome__eyebrow">Knowledge Operations</p>
-            <p className="content-chrome__title">Reference search and source review</p>
+            <p className="content-chrome__title">Organization reference search and source review</p>
           </div>
-          <div className="content-chrome__badge">MVP</div>
+          <div className="content-chrome__badge">{authEnabled ? "Org scoped" : "Local"}</div>
         </div>
         {children}
       </main>

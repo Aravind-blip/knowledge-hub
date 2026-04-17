@@ -3,25 +3,58 @@
 ## Current Validation
 
 - Demo seed content is stored in [docs/demo-data](/Users/aravindbandipelli/Desktop/AravindCode-bot/docs/demo-data)
-- Benchmark prompts are stored in [benchmark_questions.json](/Users/aravindbandipelli/Desktop/AravindCode-bot/docs/evaluation/benchmark_questions.json)
-- The evaluation script in [eval.py](/Users/aravindbandipelli/Desktop/AravindCode-bot/backend/scripts/eval.py) checks:
-  - HTTP status
-  - answer preview
-  - retrieval count
-  - insufficient-information behavior
-  - whether expected source files appear in the citations
+- The labeled evaluation set is stored in [organization_eval_dataset.jsonl](/Users/aravindbandipelli/Desktop/AravindCode-bot/docs/evaluation/organization_eval_dataset.jsonl)
+- The evaluation runner is [run_evals.py](/Users/aravindbandipelli/Desktop/AravindCode-bot/backend/scripts/run_evals.py)
+- The evaluation artifact is written to [artifacts/evals/latest.json](/Users/aravindbandipelli/Desktop/AravindCode-bot/artifacts/evals/.gitkeep) by default
 
-## Manual Validation Modes
+## Reported Metrics
 
-- Fallback mode
-  - verify the full upload and query flow without external secrets
-- OpenAI mode
-  - verify embeddings and answer generation through [verify_openai_provider.py](/Users/aravindbandipelli/Desktop/AravindCode-bot/backend/scripts/verify_openai_provider.py)
-- LangSmith mode
-  - verify trace creation through [verify_langsmith_tracing.py](/Users/aravindbandipelli/Desktop/AravindCode-bot/backend/scripts/verify_langsmith_tracing.py)
+- Top-3 retrieval accuracy
+- Top-5 retrieval accuracy
+- Hit rate
+- Mean reciprocal rank
+- Grounded answer rate
+- Citation coverage rate
+- Low-confidence fallback precision
+- Hallucination rate
+- Average and p95 retrieval latency
+- Average and p95 answer latency
+
+## Run Commands
+
+Local backend:
+
+```bash
+cd /Users/aravindbandipelli/Desktop/AravindCode-bot/backend
+source .venv/bin/activate
+python scripts/run_evals.py --base-url http://localhost:8000 --output ../artifacts/evals/latest.json
+```
+
+Protected backend:
+
+```bash
+cd /Users/aravindbandipelli/Desktop/AravindCode-bot/backend
+source .venv/bin/activate
+python scripts/run_evals.py \
+  --base-url https://YOUR_BACKEND_HOST \
+  --bearer-token YOUR_SUPABASE_ACCESS_TOKEN \
+  --output ../artifacts/evals/latest.json
+```
+
+## Dataset Shape
+
+Each line in the JSONL dataset includes:
+
+- `id`
+- `category`
+- `question`
+- `expected_sources`
+- `grounding_terms`
+- `should_fallback`
 
 ## Future Expansion
 
+- organization-specific eval fixtures
 - citation span matching
 - answer completeness scoring
 - latency thresholds by question type
