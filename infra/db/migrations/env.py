@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+import logging
 from logging.config import fileConfig
 
 from alembic import context
 from alembic.script import ScriptDirectory
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.migration_bootstrap import determine_bootstrap_revision
+from app.db.migration_bootstrap import clear_implicit_transaction, determine_bootstrap_revision, stamp_legacy_revision
 from app.models import *  # noqa: F403
 
 config = context.config
+logger = logging.getLogger(__name__)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -46,6 +48,7 @@ def do_run_migrations(connection) -> None:
     if bootstrap_legacy_schema(connection):
         return
 
+    clear_implicit_transaction(connection, logger)
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
@@ -68,12 +71,7 @@ def bootstrap_legacy_schema(connection) -> bool:
         head_revision=ScriptDirectory.from_config(config).get_current_head(),
     )
 
-    connection.execute(text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"))
-    connection.execute(text("DELETE FROM alembic_version"))
-    connection.execute(
-        text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
-        {"revision": revision},
-    )
+    stamp_legacy_revision(connection, revision, logger)
     return True
 
 

@@ -13,47 +13,66 @@ depends_on = None
 
 DEMO_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 DEMO_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
+CORE_TABLES = ("documents", "document_chunks", "chat_sessions", "chat_messages", "ingestion_jobs")
+
+
+def _has_foreign_key(inspector, table_name: str, constrained_column: str, referred_table: str) -> bool:
+    for foreign_key in inspector.get_foreign_keys(table_name):
+        if foreign_key.get("referred_table") != referred_table:
+            continue
+        if constrained_column in foreign_key.get("constrained_columns", []):
+            return True
+    return False
 
 
 def upgrade() -> None:
-    op.create_table(
-        "organizations",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("slug", sa.String(length=255), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.UniqueConstraint("slug", name="uq_organizations_slug"),
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS organizations (
+            id UUID NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            slug VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+            PRIMARY KEY (id),
+            CONSTRAINT uq_organizations_slug UNIQUE (slug)
+        )
+        """
     )
-    op.create_index("ix_organizations_created_at", "organizations", ["created_at"], unique=False)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_organizations_created_at ON organizations (created_at)")
 
-    op.create_table(
-        "organization_members",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("organization_id", UUID(as_uuid=True), sa.ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", UUID(as_uuid=True), nullable=False),
-        sa.Column("role", sa.String(length=20), nullable=False, server_default="member"),
-        sa.Column("joined_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.UniqueConstraint("organization_id", "user_id", name="uq_organization_members_org_user"),
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS organization_members (
+            id UUID NOT NULL,
+            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL,
+            role VARCHAR(20) DEFAULT 'member' NOT NULL,
+            joined_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+            PRIMARY KEY (id),
+            CONSTRAINT uq_organization_members_org_user UNIQUE (organization_id, user_id)
+        )
+        """
     )
-    op.create_index("ix_organization_members_user_id", "organization_members", ["user_id"], unique=False)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_organization_members_user_id ON organization_members (user_id)")
 
-    op.add_column("documents", sa.Column("organization_id", UUID(as_uuid=True), nullable=True))
-    op.add_column("document_chunks", sa.Column("organization_id", UUID(as_uuid=True), nullable=True))
-    op.add_column("chat_sessions", sa.Column("organization_id", UUID(as_uuid=True), nullable=True))
-    op.add_column("chat_messages", sa.Column("organization_id", UUID(as_uuid=True), nullable=True))
-    op.add_column("ingestion_jobs", sa.Column("organization_id", UUID(as_uuid=True), nullable=True))
+    for table_name in CORE_TABLES:
+        op.execute(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS organization_id UUID")
 
     op.execute(
         sa.text(
             """
             INSERT INTO organizations (id, name, slug)
-            VALUES (:organization_id, 'Demo Workspace', 'demo-workspace')
+            SELECT :organization_id, 'Demo Workspace', 'demo-workspace'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM organizations
+                WHERE id = :organization_id OR slug = 'demo-workspace'
+            )
             """
         ).bindparams(sa.bindparam("organization_id", value=DEMO_ORG_ID, type_=UUID(as_uuid=True)))
     )
 
-    for table_name in ("documents", "document_chunks", "chat_sessions", "chat_messages", "ingestion_jobs"):
+    for table_name in CORE_TABLES:
         op.execute(
             sa.text(f"UPDATE {table_name} SET organization_id = :organization_id WHERE organization_id IS NULL").bindparams(
                 sa.bindparam("organization_id", value=DEMO_ORG_ID, type_=UUID(as_uuid=True))
@@ -85,8 +104,12 @@ def upgrade() -> None:
             sa.text(
                 """
                 INSERT INTO organization_members (id, organization_id, user_id, role)
-                VALUES (:id, :organization_id, :user_id, :role)
-                ON CONFLICT ON CONSTRAINT uq_organization_members_org_user DO NOTHING
+                SELECT :id, :organization_id, :user_id, :role
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM organization_members
+                    WHERE organization_id = :organization_id AND user_id = :user_id
+                )
                 """
             ).bindparams(
                 id=uuid.uuid4(),
@@ -96,77 +119,47 @@ def upgrade() -> None:
             )
         )
 
-    op.alter_column("documents", "organization_id", nullable=False)
-    op.alter_column("document_chunks", "organization_id", nullable=False)
-    op.alter_column("chat_sessions", "organization_id", nullable=False)
-    op.alter_column("chat_messages", "organization_id", nullable=False)
-    op.alter_column("ingestion_jobs", "organization_id", nullable=False)
+    for table_name in CORE_TABLES:
+        op.execute(f"ALTER TABLE {table_name} ALTER COLUMN organization_id SET NOT NULL")
 
-    op.create_foreign_key(
-        "fk_documents_organization_id_organizations",
-        "documents",
-        "organizations",
-        ["organization_id"],
-        ["id"],
-        ondelete="CASCADE",
+    inspector = sa.inspect(connection)
+    foreign_keys = {
+        "documents": "fk_documents_organization_id_organizations",
+        "document_chunks": "fk_document_chunks_organization_id_organizations",
+        "chat_sessions": "fk_chat_sessions_organization_id_organizations",
+        "chat_messages": "fk_chat_messages_organization_id_organizations",
+        "ingestion_jobs": "fk_ingestion_jobs_organization_id_organizations",
+    }
+    for table_name, constraint_name in foreign_keys.items():
+        if not _has_foreign_key(inspector, table_name, "organization_id", "organizations"):
+            op.create_foreign_key(
+                constraint_name,
+                table_name,
+                "organizations",
+                ["organization_id"],
+                ["id"],
+                ondelete="CASCADE",
+            )
+
+    op.execute("CREATE INDEX IF NOT EXISTS ix_documents_org_id_created_at ON documents (organization_id, created_at)")
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_documents_org_id_status_created_at ON documents (organization_id, status, created_at)"
     )
-    op.create_foreign_key(
-        "fk_document_chunks_organization_id_organizations",
-        "document_chunks",
-        "organizations",
-        ["organization_id"],
-        ["id"],
-        ondelete="CASCADE",
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_document_chunks_org_id_document_id ON document_chunks (organization_id, document_id)"
     )
-    op.create_foreign_key(
-        "fk_chat_sessions_organization_id_organizations",
-        "chat_sessions",
-        "organizations",
-        ["organization_id"],
-        ["id"],
-        ondelete="CASCADE",
+    op.execute("CREATE INDEX IF NOT EXISTS ix_chat_sessions_org_id_updated_at ON chat_sessions (organization_id, updated_at)")
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_chat_sessions_org_id_user_id_updated_at ON chat_sessions (organization_id, user_id, updated_at)"
     )
-    op.create_foreign_key(
-        "fk_chat_messages_organization_id_organizations",
-        "chat_messages",
-        "organizations",
-        ["organization_id"],
-        ["id"],
-        ondelete="CASCADE",
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_chat_messages_org_id_session_id_created_at ON chat_messages (organization_id, session_id, created_at)"
     )
-    op.create_foreign_key(
-        "fk_ingestion_jobs_organization_id_organizations",
-        "ingestion_jobs",
-        "organizations",
-        ["organization_id"],
-        ["id"],
-        ondelete="CASCADE",
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_ingestion_jobs_org_id_created_at ON ingestion_jobs (organization_id, created_at)"
     )
 
-    op.create_index("ix_documents_org_id_created_at", "documents", ["organization_id", "created_at"], unique=False)
-    op.create_index(
-        "ix_documents_org_id_status_created_at",
-        "documents",
-        ["organization_id", "status", "created_at"],
-        unique=False,
-    )
-    op.create_index("ix_document_chunks_org_id_document_id", "document_chunks", ["organization_id", "document_id"], unique=False)
-    op.create_index("ix_chat_sessions_org_id_updated_at", "chat_sessions", ["organization_id", "updated_at"], unique=False)
-    op.create_index(
-        "ix_chat_sessions_org_id_user_id_updated_at",
-        "chat_sessions",
-        ["organization_id", "user_id", "updated_at"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_chat_messages_org_id_session_id_created_at",
-        "chat_messages",
-        ["organization_id", "session_id", "created_at"],
-        unique=False,
-    )
-    op.create_index("ix_ingestion_jobs_org_id_created_at", "ingestion_jobs", ["organization_id", "created_at"], unique=False)
-
-    for table_name in ("documents", "document_chunks", "chat_sessions", "chat_messages", "ingestion_jobs"):
+    for table_name in CORE_TABLES:
         op.execute(f"ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY")
         op.execute(f"ALTER TABLE {table_name} FORCE ROW LEVEL SECURITY")
 

@@ -1,9 +1,14 @@
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
 from app.db import session as db_session
-from app.db.migration_bootstrap import determine_bootstrap_revision
+from app.db.migration_bootstrap import (
+    clear_implicit_transaction,
+    determine_bootstrap_revision,
+    stamp_legacy_revision,
+)
 
 
 def test_alembic_assets_exist() -> None:
@@ -107,3 +112,67 @@ def test_determine_bootstrap_revision_uses_user_scope_for_pre_org_schema() -> No
     revision = determine_bootstrap_revision(tables, has_column, "20260417_0003")
 
     assert revision == "20260409_0002"
+
+
+def test_stamp_legacy_revision_commits_and_logs() -> None:
+    calls = []
+    logger = Mock()
+
+    class DummyConnection:
+        def execute(self, statement, params=None):
+            calls.append((str(statement), params))
+
+        def commit(self):
+            calls.append("commit")
+
+    stamp_legacy_revision(DummyConnection(), "20260409_0002", logger)
+
+    assert "CREATE TABLE IF NOT EXISTS alembic_version" in calls[0][0]
+    assert "DELETE FROM alembic_version" in calls[1][0]
+    assert "INSERT INTO alembic_version" in calls[2][0]
+    assert calls[2][1] == {"revision": "20260409_0002"}
+    assert calls[3] == "commit"
+    logger.info.assert_called_once_with(
+        "Bootstrapped legacy schema revision",
+        extra={"bootstrap_revision": "20260409_0002"},
+    )
+
+
+def test_clear_implicit_transaction_rolls_back_and_logs() -> None:
+    logger = Mock()
+
+    class DummyConnection:
+        def __init__(self):
+            self.rolled_back = False
+
+        def in_transaction(self):
+            return True
+
+        def rollback(self):
+            self.rolled_back = True
+
+    connection = DummyConnection()
+    clear_implicit_transaction(connection, logger)
+
+    assert connection.rolled_back is True
+    logger.debug.assert_called_once_with("Rolled back implicit schema inspection transaction before Alembic migration run")
+
+
+def test_clear_implicit_transaction_noops_without_transaction() -> None:
+    logger = Mock()
+
+    class DummyConnection:
+        def __init__(self):
+            self.rolled_back = False
+
+        def in_transaction(self):
+            return False
+
+        def rollback(self):
+            self.rolled_back = True
+
+    connection = DummyConnection()
+    clear_implicit_transaction(connection, logger)
+
+    assert connection.rolled_back is False
+    logger.debug.assert_not_called()
