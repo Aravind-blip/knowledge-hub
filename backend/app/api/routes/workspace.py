@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -17,6 +19,7 @@ from app.schemas.workspace import (
 )
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/summary", response_model=WorkspaceSummaryResponse)
@@ -24,11 +27,12 @@ async def get_workspace_summary(
     session: AsyncSession = Depends(get_request_db_session),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> WorkspaceSummaryResponse:
+    started = time.perf_counter()
     activity = await _build_activity_summary(session, current_user.organization_id)
     eval_metrics = _load_metrics("evals", "latest.json")
     load_metrics = _load_metrics("load", "latest.json")
 
-    return WorkspaceSummaryResponse(
+    response = WorkspaceSummaryResponse(
         organization_name=current_user.organization_name,
         organization_slug=current_user.organization_slug,
         role=current_user.role,
@@ -68,26 +72,29 @@ async def get_workspace_summary(
             ),
         ],
     )
+    logger.info(
+        "Built workspace summary",
+        extra={
+            "organization_id": str(current_user.organization_id),
+            "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+            "total_documents": activity.total_documents,
+            "session_count": activity.session_count,
+        },
+    )
+    return response
 
 
 async def _build_activity_summary(session: AsyncSession, organization_id) -> OrganizationActivityResponse:
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
 
-    total_documents = await session.scalar(
-        select(func.count()).select_from(Document).where(Document.organization_id == organization_id)
+    document_totals = await session.execute(
+        select(
+            func.count(Document.id),
+            func.count(Document.id).filter(Document.status == "indexed"),
+            func.count(Document.id).filter(Document.created_at >= thirty_days_ago),
+        ).where(Document.organization_id == organization_id)
     )
-    indexed_documents = await session.scalar(
-        select(func.count()).select_from(Document).where(
-            Document.organization_id == organization_id,
-            Document.status == "indexed",
-        )
-    )
-    recent_uploads = await session.scalar(
-        select(func.count()).select_from(Document).where(
-            Document.organization_id == organization_id,
-            Document.created_at >= thirty_days_ago,
-        )
-    )
+    total_documents, indexed_documents, recent_uploads = document_totals.one()
     session_count = await session.scalar(
         select(func.count()).select_from(ChatSession).where(ChatSession.organization_id == organization_id)
     )

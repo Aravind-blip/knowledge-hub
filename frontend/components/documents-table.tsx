@@ -2,20 +2,32 @@ import Link from "next/link";
 
 import type { DocumentRecord } from "@/types";
 import { formatBytes, formatDate } from "@/lib/utils";
+import { ListPagination } from "@/components/list-pagination";
 
 
-export function DocumentsTable({ documents }: { documents: DocumentRecord[] }) {
+export function DocumentsTable({
+  documents,
+  page,
+  pageSize,
+  total,
+}: {
+  documents: DocumentRecord[];
+  page: number;
+  pageSize: number;
+  total: number;
+}) {
   return (
     <div className="panel">
       <div className="panel__header">
         <div>
           <h2>Indexed files</h2>
-          <p>Current organization document inventory, source coverage, and indexing status.</p>
+          <p>Current organization document inventory, ingestion status, and source readiness.</p>
         </div>
         <Link className="button button--secondary" href="/documents/upload">
           Upload documents
         </Link>
       </div>
+      <ListPagination basePath="/documents" page={page} pageSize={pageSize} total={total} />
       <div className="table-wrap">
         <table className="data-table">
           <thead>

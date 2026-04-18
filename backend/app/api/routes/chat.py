@@ -5,8 +5,8 @@ import time
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.qa_graph import build_qa_graph
@@ -181,9 +181,19 @@ async def retrieve_sources(
 
 @router.get("/sessions", response_model=ChatSessionListResponse)
 async def list_sessions(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_request_db_session),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ChatSessionListResponse:
+    started = time.perf_counter()
+    offset = (page - 1) * page_size
+    total = await session.scalar(
+        select(func.count()).select_from(ChatSession).where(
+            ChatSession.organization_id == current_user.organization_id,
+            ChatSession.user_id == current_user.user_id,
+        )
+    )
     result = await session.execute(
         select(ChatSession)
         .where(
@@ -191,8 +201,21 @@ async def list_sessions(
             ChatSession.user_id == current_user.user_id,
         )
         .order_by(ChatSession.updated_at.desc())
+        .offset(offset)
+        .limit(page_size)
     )
     sessions = list(result.scalars())
+    logger.info(
+        "Listed chat sessions",
+        extra={
+            "user_id": str(current_user.user_id),
+            "organization_id": str(current_user.organization_id),
+            "page": page,
+            "page_size": page_size,
+            "total": int(total or 0),
+            "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+        },
+    )
     return ChatSessionListResponse(
         items=[
             ChatSessionSummary(
@@ -202,7 +225,10 @@ async def list_sessions(
                 updated_at=item.updated_at,
             )
             for item in sessions
-        ]
+        ],
+        total=int(total or 0),
+        page=page,
+        page_size=page_size,
     )
 
 

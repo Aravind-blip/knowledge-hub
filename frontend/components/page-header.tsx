@@ -20,4 +20,3 @@ export function PageHeader({ eyebrow, title, description, actions }: PageHeaderP
     </div>
   );
 }
-

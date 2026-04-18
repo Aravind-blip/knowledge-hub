@@ -4,9 +4,21 @@ import { MetricGrid } from "@/components/metric-grid";
 import { PageHeader } from "@/components/page-header";
 import { getDocuments, getWorkspaceSummary } from "@/lib/server-api";
 
+function parsePage(value?: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
 
-export default async function DocumentsPage() {
-  const [data, workspace] = await Promise.all([getDocuments(), getWorkspaceSummary()]);
+export default async function DocumentsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = await searchParams;
+  const page = parsePage(
+    typeof resolvedSearchParams?.page === "string" ? resolvedSearchParams.page : undefined,
+  );
+  const [data, workspace] = await Promise.all([getDocuments(page, 20), getWorkspaceSummary()]);
 
   return (
     <section className="page">
@@ -24,7 +36,7 @@ export default async function DocumentsPage() {
           actionLabel="Upload documents"
         />
       ) : (
-        <DocumentsTable documents={data.items} />
+        <DocumentsTable documents={data.items} page={data.page} pageSize={data.page_size} total={data.total} />
       )}
     </section>
   );

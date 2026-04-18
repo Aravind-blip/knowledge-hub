@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import type { DocumentListResponse, SessionListResponse, SessionResponse, WorkspaceSummary } from "@/types";
 import { getServerAuth } from "@/lib/supabase/server";
 
@@ -21,18 +23,26 @@ async function backendFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function getDocuments(): Promise<DocumentListResponse> {
-  return backendFetch<DocumentListResponse>("/api/documents");
-}
+export const getDocuments = cache(async function getDocuments(page = 1, pageSize = 20): Promise<DocumentListResponse> {
+  const query = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  return backendFetch<DocumentListResponse>(`/api/documents?${query.toString()}`);
+});
 
-export async function getSession(sessionId: string): Promise<SessionResponse> {
+export const getSession = cache(async function getSession(sessionId: string): Promise<SessionResponse> {
   return backendFetch<SessionResponse>(`/api/chat/sessions/${sessionId}`);
-}
+});
 
-export async function getSessions(): Promise<SessionListResponse> {
-  return backendFetch<SessionListResponse>("/api/chat/sessions");
-}
+export const getSessions = cache(async function getSessions(page = 1, pageSize = 20): Promise<SessionListResponse> {
+  const query = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  return backendFetch<SessionListResponse>(`/api/chat/sessions?${query.toString()}`);
+});
 
-export async function getWorkspaceSummary(): Promise<WorkspaceSummary> {
+export const getWorkspaceSummary = cache(async function getWorkspaceSummary(): Promise<WorkspaceSummary> {
   return backendFetch<WorkspaceSummary>("/api/workspace/summary");
-}
+});

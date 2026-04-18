@@ -59,14 +59,14 @@ export function SearchWorkspace({
             <p>Responses are generated only from indexed organization files. If the evidence is weak, the system returns a clear information gap.</p>
           </div>
         </div>
-        <div className="guidance-card">
+        <div className="guidance-card guidance-card--stacked">
           <div className="guidance-card__item">
             <strong>Best results</strong>
-            <span>Use specific process, policy, or exception questions.</span>
+            <span>Use specific questions about process, policy, operations, or support workflows.</span>
           </div>
           <div className="guidance-card__item">
             <strong>Sources returned</strong>
-            <span>Every result includes the file name and supporting excerpt.</span>
+            <span>Every answer includes document citations and supporting excerpts from your organization workspace.</span>
           </div>
         </div>
         <form className="ask-form" onSubmit={onSubmit}>
@@ -94,20 +94,29 @@ export function SearchWorkspace({
       <div className="panel">
         <div className="panel__header">
           <div>
-            <h2>{initialSession ? "Results" : "Before you search"}</h2>
+            <h2>{initialSession ? "Results" : "How search behaves"}</h2>
             <p>
               {initialSession
                 ? `Session opened ${formatDate(initialSession.created_at)}`
-                : "Upload organization reference material first, then ask specific questions about policy, support, or operations content."}
+                : "Search runs only against indexed documents inside your organization. Results stay grounded to cited source material."}
             </p>
           </div>
         </div>
 
         {!initialSession ? (
-          <div className="empty-state empty-state--inline">
-            <div className="empty-state__badge">Ready</div>
-            <h2>No active session</h2>
-            <p>Results will appear here with source excerpts and file references once you submit a request.</p>
+          <div className="ops-list">
+            <div className="ops-list__item">
+              <strong>Scoped retrieval</strong>
+              <span>Documents outside your organization are never part of the retrieval set.</span>
+            </div>
+            <div className="ops-list__item">
+              <strong>Grounded responses</strong>
+              <span>Low-confidence requests return an explicit information gap instead of a fabricated answer.</span>
+            </div>
+            <div className="ops-list__item">
+              <strong>Reopenable history</strong>
+              <span>Each submitted question creates a session that can be reopened and continued later.</span>
+            </div>
           </div>
         ) : (
           <div className="conversation">

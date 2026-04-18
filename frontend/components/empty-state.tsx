@@ -11,7 +11,7 @@ type EmptyStateProps = {
 export function EmptyState({ title, description, actionHref, actionLabel }: EmptyStateProps) {
   return (
     <div className="empty-state">
-      <div className="empty-state__badge">Knowledge Hub</div>
+      <div className="empty-state__badge">Ready when you are</div>
       <h2>{title}</h2>
       <p>{description}</p>
       {actionHref && actionLabel ? (
@@ -22,4 +22,3 @@ export function EmptyState({ title, description, actionHref, actionLabel }: Empt
     </div>
   );
 }
-

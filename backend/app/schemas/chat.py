@@ -42,6 +42,9 @@ class ChatSessionSummary(BaseModel):
 
 class ChatSessionListResponse(BaseModel):
     items: list[ChatSessionSummary]
+    total: int
+    page: int
+    page_size: int
 
 
 class RetrieveRequest(BaseModel):

@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Document, DocumentChunk, IngestionJob
@@ -115,11 +115,20 @@ class IngestionService:
                 logger.exception("Document ingestion failed", extra={"document_id": str(document.id)})
                 raise
 
-    async def list_documents(self, session: AsyncSession, organization_id: UUID) -> list[Document]:
-        result = await session.execute(
-            select(Document).where(Document.organization_id == organization_id).order_by(Document.created_at.desc())
+    async def list_documents(
+        self, session: AsyncSession, organization_id: UUID, *, offset: int = 0, limit: int = 20
+    ) -> tuple[list[Document], int]:
+        total = await session.scalar(
+            select(func.count()).select_from(Document).where(Document.organization_id == organization_id)
         )
-        return list(result.scalars())
+        result = await session.execute(
+            select(Document)
+            .where(Document.organization_id == organization_id)
+            .order_by(Document.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars()), int(total or 0)
 
     async def get_document(
         self, session: AsyncSession, document_id: UUID, organization_id: UUID

@@ -29,6 +29,9 @@ export type DocumentRecord = {
 
 export type DocumentListResponse = {
   items: DocumentRecord[];
+  total: number;
+  page: number;
+  page_size: number;
 };
 
 export type AskResponse = {
@@ -67,6 +70,9 @@ export type SessionSummary = {
 
 export type SessionListResponse = {
   items: SessionSummary[];
+  total: number;
+  page: number;
+  page_size: number;
 };
 
 export type MetricCard = {

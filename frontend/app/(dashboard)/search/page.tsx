@@ -4,11 +4,12 @@ import { EmptyState } from "@/components/empty-state";
 import { MetricGrid } from "@/components/metric-grid";
 import { PageHeader } from "@/components/page-header";
 import { SearchWorkspace } from "@/components/search-workspace";
-import { getDocuments, getWorkspaceSummary } from "@/lib/server-api";
+import { getWorkspaceSummary } from "@/lib/server-api";
 
 
 export default async function SearchPage() {
-  const [documents, workspace] = await Promise.all([getDocuments(), getWorkspaceSummary()]);
+  const workspace = await getWorkspaceSummary();
+  const hasDocuments = workspace.activity.total_documents > 0;
 
   return (
     <section className="page">
@@ -23,15 +24,15 @@ export default async function SearchPage() {
         }
       />
       <MetricGrid metrics={workspace.quality_metrics} />
-      {documents.items.length === 0 ? (
+      {hasDocuments ? (
+        <SearchWorkspace standalone />
+      ) : (
         <EmptyState
           title="Documents are required before searching"
           description="Upload at least one organization document so the workspace has source material to retrieve from."
           actionHref="/documents/upload"
           actionLabel="Upload documents"
         />
-      ) : (
-        <SearchWorkspace standalone />
       )}
     </section>
   );

@@ -35,9 +35,11 @@ async def override_user():
     )
 
 
-async def fake_list_documents(self, session, organization_id):
+async def fake_list_documents(self, session, organization_id, *, offset=0, limit=20):
     assert str(organization_id) == "22222222-2222-2222-2222-222222222222"
-    return []
+    assert offset == 0
+    assert limit == 20
+    return [], 0
 
 
 def test_documents_route_returns_empty_list(monkeypatch) -> None:
@@ -49,7 +51,7 @@ def test_documents_route_returns_empty_list(monkeypatch) -> None:
     response = client.get("/api/documents")
 
     assert response.status_code == 200
-    assert response.json() == {"items": []}
+    assert response.json() == {"items": [], "page": 1, "page_size": 20, "total": 0}
     app.dependency_overrides.clear()
 
 
@@ -61,12 +63,12 @@ def test_documents_route_rolls_back_before_schema_retry(monkeypatch) -> None:
 
     calls = {"count": 0, "schema_checked": False}
 
-    async def flaky_list_documents(self, db_session, organization_id):
+    async def flaky_list_documents(self, db_session, organization_id, *, offset=0, limit=20):
         calls["count"] += 1
         assert str(organization_id) == "22222222-2222-2222-2222-222222222222"
         if calls["count"] == 1:
             raise ProgrammingError("SELECT 1", {}, Exception("missing column"))
-        return []
+        return [], 0
 
     async def fake_ensure_schema_ready():
         calls["schema_checked"] = True
@@ -80,7 +82,7 @@ def test_documents_route_rolls_back_before_schema_retry(monkeypatch) -> None:
     response = client.get("/api/documents")
 
     assert response.status_code == 200
-    assert response.json() == {"items": []}
+    assert response.json() == {"items": [], "page": 1, "page_size": 20, "total": 0}
     assert session.rollback_called is True
     assert calls["schema_checked"] is True
     assert calls["count"] == 2

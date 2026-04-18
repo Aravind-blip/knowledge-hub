@@ -17,4 +17,6 @@ class DocumentResponse(BaseModel):
 
 class DocumentListResponse(BaseModel):
     items: list[DocumentResponse]
-
+    total: int
+    page: int
+    page_size: int

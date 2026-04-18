@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,25 +36,38 @@ def serialize_document(document: Document) -> DocumentResponse:
 
 @router.get("", response_model=DocumentListResponse)
 async def list_documents(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_request_db_session),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> DocumentListResponse:
     service = IngestionService(DocumentParser(), get_embedding_service())
+    offset = (page - 1) * page_size
     logger.info(
         "Listing documents",
-        extra={"path": "/api/documents", "method": "GET", "user_id": str(current_user.user_id)},
+        extra={
+            "path": "/api/documents",
+            "method": "GET",
+            "user_id": str(current_user.user_id),
+            "page": page,
+            "page_size": page_size,
+        },
     )
     try:
-        documents = await service.list_documents(session, current_user.organization_id)
+        documents, total = await service.list_documents(
+            session, current_user.organization_id, offset=offset, limit=page_size
+        )
     except (OperationalError, ProgrammingError):
         logger.exception("Document listing failed; verifying database schema")
         await session.rollback()
         await ensure_schema_ready()
-        documents = await service.list_documents(session, current_user.organization_id)
+        documents, total = await service.list_documents(
+            session, current_user.organization_id, offset=offset, limit=page_size
+        )
 
     if not documents:
         logger.info("No documents indexed yet", extra={"path": "/api/documents", "method": "GET"})
-        return DocumentListResponse(items=[])
+        return DocumentListResponse(items=[], total=total, page=page, page_size=page_size)
 
     payload = [serialize_document(item) for item in documents]
     logger.info(
@@ -63,9 +76,10 @@ async def list_documents(
             "path": "/api/documents",
             "method": "GET",
             "retrieved_count": len(payload),
+            "total": total,
         },
     )
-    return DocumentListResponse(items=payload)
+    return DocumentListResponse(items=payload, total=total, page=page, page_size=page_size)
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)

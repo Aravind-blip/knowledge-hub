@@ -52,10 +52,8 @@ export function DashboardShell({
           </div>
         </div>
         <div className="sidebar-panel">
-          <p className="sidebar-panel__title">{authEnabled ? "Organization workspace" : "Workspace mode"}</p>
-          <p className="sidebar-panel__text">
-            {authEnabled ? organizationName ?? "Provisioning workspace" : "Development workspace"}
-          </p>
+          <p className="sidebar-panel__title">{authEnabled ? "Organization" : "Workspace mode"}</p>
+          <p className="sidebar-panel__text">{authEnabled ? organizationName ?? "Provisioning workspace" : "Development workspace"}</p>
           {authEnabled ? (
             <p className="sidebar-panel__text">{userName ?? userEmail ?? "Signed-in user"} · {role ?? "member"}</p>
           ) : null}
@@ -75,9 +73,9 @@ export function DashboardShell({
           ))}
         </nav>
         <div className="sidebar-footer">
-          <p className="sidebar-footer__label">Coverage</p>
+          <p className="sidebar-footer__label">Controls</p>
           <p className="sidebar-footer__text">
-            PDF and text-based sources stay isolated to your organization and tied to cited material.
+            Files, search, and cited excerpts stay isolated to your organization boundary.
           </p>
           {authEnabled ? (
             <button className="button button--secondary" onClick={signOut} type="button">
@@ -90,9 +88,10 @@ export function DashboardShell({
         <div className="content-chrome">
           <div className="content-chrome__title-group">
             <p className="content-chrome__eyebrow">Knowledge Operations</p>
-            <p className="content-chrome__title">Organization reference search and source review</p>
+            <p className="content-chrome__title">{organizationName ?? "Organization workspace"}</p>
+            <p className="content-chrome__meta">{userName ?? userEmail ?? "Signed-in user"}</p>
           </div>
-          <div className="content-chrome__badge">{authEnabled ? "Org scoped" : "Local"}</div>
+          <div className="content-chrome__badge">{authEnabled ? "Organization scoped" : "Local mode"}</div>
         </div>
         {children}
       </main>

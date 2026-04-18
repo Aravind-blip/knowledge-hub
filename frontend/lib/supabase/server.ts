@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 import { createServerClient } from "@supabase/ssr";
 
@@ -33,7 +34,7 @@ export async function createSupabaseServerClient() {
   });
 }
 
-export async function getServerAuth() {
+export const getServerAuth = cache(async function getServerAuth() {
   if (!isSupabaseAuthConfigured()) {
     return {
       supabase: null,
@@ -55,4 +56,4 @@ export async function getServerAuth() {
     accessToken: sessionData.session?.access_token ?? null,
     authConfigured: true,
   };
-}
+});

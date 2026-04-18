@@ -1,12 +1,26 @@
 import Link from "next/link";
 
 import { EmptyState } from "@/components/empty-state";
+import { ListPagination } from "@/components/list-pagination";
 import { PageHeader } from "@/components/page-header";
 import { getSessions } from "@/lib/server-api";
 import { formatDate } from "@/lib/utils";
 
-export default async function HistoryPage() {
-  const data = await getSessions();
+function parsePage(value?: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+export default async function HistoryPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = await searchParams;
+  const page = parsePage(
+    typeof resolvedSearchParams?.page === "string" ? resolvedSearchParams.page : undefined,
+  );
+  const data = await getSessions(page, 15);
 
   return (
     <section className="page">
@@ -24,6 +38,13 @@ export default async function HistoryPage() {
         />
       ) : (
         <div className="panel">
+          <div className="panel__header">
+            <div>
+              <h2>Recent sessions</h2>
+              <p>Review the answer threads you own inside your organization workspace.</p>
+            </div>
+          </div>
+          <ListPagination basePath="/history" page={data.page} pageSize={data.page_size} total={data.total} />
           <div className="conversation">
             {data.items.map((session) => (
               <article className="message-card" key={session.id}>
