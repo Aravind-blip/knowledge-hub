@@ -21,7 +21,7 @@ export default async function LoginPage() {
         <div className="auth-shell__story">
           <p className="auth-shell__eyebrow">Knowledge Hub</p>
           <h2 className="auth-shell__title">Work within your organization&apos;s knowledge workspace.</h2>
-          <p className="auth-shell__description">
+          {/* <p className="auth-shell__description">
             Access documents securely, keep retrieval grounded in your organization boundary, and preserve audit-ready
             history for every answer.
           </p>
@@ -39,7 +39,7 @@ export default async function LoginPage() {
               <strong>Grounded document retrieval</strong>
               <span>Answers cite sources from your organization instead of searching across a shared global pool.</span>
             </div>
-          </div>
+          </div> */}
         </div>
 
         <AuthForm initialMode="signin" />
