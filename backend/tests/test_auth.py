@@ -1,17 +1,27 @@
+import json
+import time
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import HTTPException
 
 from app.core.auth import (
+    SUPABASE_JWKS_TTL_SECONDS,
     AuthIdentity,
     _build_default_workspace_profile,
     _default_organization_id,
     _ensure_membership,
+    _extract_identity_from_claims,
+    _get_supabase_jwks,
+    _jwks_cache,
     _normalize_organization_name,
     _resolve_full_name,
     _resolve_signup_organization_name,
+    _verify_supabase_token,
 )
 
 
@@ -26,6 +36,87 @@ def test_resolve_full_name_accepts_supported_metadata_keys() -> None:
     assert _resolve_full_name({"full_name": "Ava Johnson"}) == "Ava Johnson"
     assert _resolve_full_name({"name": "Taylor Chen"}) == "Taylor Chen"
     assert _resolve_full_name({"name": "   "}) is None
+
+
+def test_extract_identity_from_claims_uses_jwt_metadata() -> None:
+    identity = _extract_identity_from_claims(
+        {
+            "sub": "12df5a43-c2ba-404e-ad93-5ddee27f5c7b",
+            "email": "person@gmail.com",
+            "user_metadata": {
+                "full_name": "Person Example",
+                "organization_name": "Testing Workspace",
+            },
+        },
+        "token",
+    )
+
+    assert identity.user_id == UUID("12df5a43-c2ba-404e-ad93-5ddee27f5c7b")
+    assert identity.email == "person@gmail.com"
+    assert identity.full_name == "Person Example"
+    assert identity.organization_name == "Testing Workspace"
+
+
+@pytest.mark.anyio
+async def test_get_supabase_jwks_caches_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    _jwks_cache["expires_at"] = 0.0
+    _jwks_cache["keys_by_kid"] = {}
+    calls = {"count": 0}
+
+    class DummyResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return {"keys": [{"kid": "kid-1", "kty": "EC"}]}
+
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url: str):
+            calls["count"] += 1
+            return DummyResponse()
+
+    monkeypatch.setattr("app.core.auth.httpx.AsyncClient", lambda timeout=5.0: DummyClient())
+
+    first = await _get_supabase_jwks()
+    second = await _get_supabase_jwks()
+
+    assert first == {"kid-1": {"kid": "kid-1", "kty": "EC"}}
+    assert second == first
+    assert calls["count"] == 1
+    assert _jwks_cache["expires_at"] > 0
+
+
+@pytest.mark.anyio
+async def test_verify_supabase_token_uses_cached_jwks(monkeypatch: pytest.MonkeyPatch) -> None:
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    public_jwk = jwt.algorithms.ECAlgorithm.to_jwk(private_key.public_key())
+    jwk = {**json.loads(public_jwk), "kid": "test-kid"}
+    _jwks_cache["keys_by_kid"] = {"test-kid": jwk}
+    _jwks_cache["expires_at"] = time.monotonic() + SUPABASE_JWKS_TTL_SECONDS
+    monkeypatch.setattr("app.core.auth.settings.supabase_url", "https://ssvvikqqbxfvlsosrlnd.supabase.co")
+
+    token = jwt.encode(
+        {
+            "sub": "12df5a43-c2ba-404e-ad93-5ddee27f5c7b",
+            "email": "person@gmail.com",
+            "user_metadata": {"organization_name": "Testing Workspace"},
+            "iss": "https://ssvvikqqbxfvlsosrlnd.supabase.co/auth/v1",
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+        },
+        private_key,
+        algorithm="ES256",
+        headers={"kid": "test-kid"},
+    )
+
+    claims = await _verify_supabase_token(token)
+
+    assert claims["sub"] == "12df5a43-c2ba-404e-ad93-5ddee27f5c7b"
 
 
 def test_build_default_workspace_profile_uses_signup_org_name_not_email_domain() -> None:

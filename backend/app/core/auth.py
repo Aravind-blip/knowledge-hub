@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import uuid
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 import httpx
+import jwt
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
@@ -22,6 +24,8 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 DEMO_USER_ID = UUID("00000000-0000-0000-0000-000000000000")
 DEMO_ORG_ID = UUID("00000000-0000-0000-0000-000000000001")
+SUPABASE_JWKS_TTL_SECONDS = 300
+_jwks_cache: dict[str, Any] = {"expires_at": 0.0, "keys_by_kid": {}}
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,132 @@ def _resolve_full_name(metadata: dict) -> Optional[str]:
     return None
 
 
+def _extract_identity_from_claims(claims: dict[str, Any], token: str) -> AuthIdentity:
+    user_id = claims.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.")
+
+    user_metadata = claims.get("user_metadata") or {}
+    if not isinstance(user_metadata, dict):
+        user_metadata = {}
+
+    return AuthIdentity(
+        user_id=UUID(str(user_id)),
+        email=claims.get("email"),
+        access_token=token,
+        full_name=_resolve_full_name(user_metadata),
+        organization_name=_resolve_signup_organization_name(user_metadata),
+        is_demo_user=False,
+    )
+
+
+async def _get_supabase_jwks() -> dict[str, Any]:
+    now = time.monotonic()
+    if _jwks_cache["keys_by_kid"] and now < _jwks_cache["expires_at"]:
+        return _jwks_cache["keys_by_kid"]
+
+    if not settings.supabase_url:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication provider is unavailable.",
+        )
+
+    jwks_url = f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(jwks_url)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.exception("Supabase JWKS fetch failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication provider is unavailable.",
+        ) from exc
+
+    payload = response.json()
+    keys = payload.get("keys") or []
+    keys_by_kid = {key["kid"]: key for key in keys if isinstance(key, dict) and key.get("kid")}
+    if not keys_by_kid:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication provider is unavailable.",
+        )
+
+    _jwks_cache["keys_by_kid"] = keys_by_kid
+    _jwks_cache["expires_at"] = now + SUPABASE_JWKS_TTL_SECONDS
+    return keys_by_kid
+
+
+async def _verify_supabase_token(token: str) -> dict[str, Any]:
+    try:
+        header = jwt.get_unverified_header(token)
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.") from exc
+
+    kid = header.get("kid")
+    alg = header.get("alg")
+    if not kid or alg != "ES256":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.")
+
+    keys_by_kid = await _get_supabase_jwks()
+    jwk = keys_by_kid.get(kid)
+    if not jwk:
+        _jwks_cache["expires_at"] = 0.0
+        keys_by_kid = await _get_supabase_jwks()
+        jwk = keys_by_kid.get(kid)
+        if not jwk:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.")
+
+    issuer = f"{settings.supabase_url.rstrip('/')}/auth/v1"
+    try:
+        public_key = jwt.algorithms.ECAlgorithm.from_jwk(jwk)
+        return jwt.decode(
+            token,
+            key=public_key,
+            algorithms=["ES256"],
+            issuer=issuer,
+            options={"verify_aud": False},
+        )
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.") from exc
+
+
+async def _fetch_auth_identity_from_supabase(token: str) -> AuthIdentity:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{settings.supabase_url.rstrip('/')}/auth/v1/user",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "apikey": settings.supabase_anon_key or "",
+                },
+            )
+    except httpx.HTTPError as exc:
+        logger.exception("Supabase auth verification fallback failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication provider is unavailable.",
+        ) from exc
+
+    if response.status_code != status.HTTP_200_OK:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.")
+
+    payload = response.json()
+    user_id = payload.get("id")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.")
+    user_metadata = payload.get("user_metadata") or {}
+
+    return AuthIdentity(
+        user_id=UUID(user_id),
+        email=payload.get("email"),
+        access_token=token,
+        full_name=_resolve_full_name(user_metadata),
+        organization_name=_resolve_signup_organization_name(user_metadata),
+        is_demo_user=False,
+    )
+
+
 def _default_organization_id(identity: AuthIdentity) -> UUID:
     if identity.is_demo_user:
         return DEMO_ORG_ID
@@ -112,39 +242,13 @@ async def get_auth_identity(authorization: Optional[str] = Header(default=None))
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.")
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                f"{settings.supabase_url.rstrip('/')}/auth/v1/user",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "apikey": settings.supabase_anon_key or "",
-                },
-            )
-    except httpx.HTTPError as exc:
-        logger.exception("Supabase auth verification failed")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication provider is unavailable.",
-        ) from exc
+    claims = await _verify_supabase_token(token)
+    identity = _extract_identity_from_claims(claims, token)
+    if identity.organization_name or identity.full_name or identity.email:
+        return identity
 
-    if response.status_code != status.HTTP_200_OK:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.")
-
-    payload = response.json()
-    user_id = payload.get("id")
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.")
-    user_metadata = payload.get("user_metadata") or {}
-
-    return AuthIdentity(
-        user_id=UUID(user_id),
-        email=payload.get("email"),
-        access_token=token,
-        full_name=_resolve_full_name(user_metadata),
-        organization_name=_resolve_signup_organization_name(user_metadata),
-        is_demo_user=False,
-    )
+    logger.info("Falling back to Supabase user lookup for incomplete JWT claims")
+    return await _fetch_auth_identity_from_supabase(token)
 
 
 async def get_current_user(

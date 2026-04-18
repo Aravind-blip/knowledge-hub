@@ -9,6 +9,7 @@ const SUPABASE_ANON_KEY = __ENV.SUPABASE_ANON_KEY || "";
 const LOGIN_EMAIL = __ENV.K6_LOGIN_EMAIL || "";
 const LOGIN_PASSWORD = __ENV.K6_LOGIN_PASSWORD || "";
 const ENABLE_UPLOAD = (__ENV.ENABLE_UPLOAD || "false").toLowerCase() === "true";
+const UPLOAD_FILE_CONTENT = ENABLE_UPLOAD ? open("../../docs/demo-data/support_policy.md") : null;
 const QUESTIONS = [
   "What are the escalation steps for a late shipment?",
   "What is the password reset turnaround time?",
@@ -149,9 +150,8 @@ export function askQuestion() {
 }
 
 export function uploadDocument() {
-  const fileContent = open("../../docs/demo-data/support_policy.md");
   const payload = {
-    file: http.file(fileContent, "support_policy.md", "text/markdown"),
+    file: http.file(UPLOAD_FILE_CONTENT, "support_policy.md", "text/markdown"),
   };
   const response = http.post(`${BASE_URL}/api/documents/upload`, payload, {
     headers: TOKEN ? { Authorization: `Bearer ${TOKEN}` } : undefined,
