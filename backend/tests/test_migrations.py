@@ -83,12 +83,31 @@ async def test_ensure_schema_ready_falls_back_to_metadata_create(monkeypatch) ->
     async def fake_init_db():
         calls["init_db_called"] = True
 
+    async def fake_get_missing_required_columns():
+        return {}
+
     monkeypatch.setattr(db_session, "_get_existing_tables_with_extension", fake_get_existing_tables_with_extension)
     monkeypatch.setattr(db_session, "init_db", fake_init_db)
+    monkeypatch.setattr(db_session, "_get_missing_required_columns", fake_get_missing_required_columns)
 
     await db_session.ensure_schema_ready()
 
     assert calls["init_db_called"] is True
+
+
+@pytest.mark.anyio
+async def test_ensure_schema_ready_fails_when_required_columns_missing(monkeypatch) -> None:
+    async def fake_get_existing_tables_with_extension():
+        return set(db_session.REQUIRED_TABLES)
+
+    async def fake_get_missing_required_columns():
+        return {"documents": {"organization_id"}}
+
+    monkeypatch.setattr(db_session, "_get_existing_tables_with_extension", fake_get_existing_tables_with_extension)
+    monkeypatch.setattr(db_session, "_get_missing_required_columns", fake_get_missing_required_columns)
+
+    with pytest.raises(RuntimeError, match="Missing required columns: documents\\(organization_id\\)"):
+        await db_session.ensure_schema_ready()
 
 
 def test_determine_bootstrap_revision_prefers_org_schema() -> None:

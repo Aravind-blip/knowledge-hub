@@ -9,8 +9,10 @@ from uuid import UUID
 
 import httpx
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.db.session import get_unscoped_db_session
@@ -27,6 +29,8 @@ class AuthIdentity:
     user_id: UUID
     email: Optional[str]
     access_token: Optional[str]
+    full_name: Optional[str] = None
+    organization_name: Optional[str] = None
     is_demo_user: bool = False
 
 
@@ -35,6 +39,7 @@ class CurrentUser:
     user_id: UUID
     email: Optional[str]
     access_token: Optional[str]
+    full_name: Optional[str]
     organization_id: UUID
     organization_name: str
     organization_slug: str
@@ -48,17 +53,52 @@ def _slugify(value: str) -> str:
     return slug or "workspace"
 
 
-def _build_default_workspace_name(email: Optional[str]) -> tuple[str, str]:
-    if email and "@" in email:
-        local_part, domain = email.split("@", 1)
-        domain_name = domain.split(".", 1)[0].replace("-", " ").strip()
-        if domain_name:
-            name = f"{domain_name.title()} Workspace"
-        else:
-            name = f"{local_part.title()} Workspace"
-        slug_base = f"{_slugify(domain_name or local_part)}-{local_part[:8]}"
-        return name, _slugify(slug_base)
-    return "Demo Workspace", "demo-workspace"
+def _normalize_organization_name(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    normalized = " ".join(value.split()).strip()
+    if not normalized:
+        return None
+    return normalized[:255]
+
+
+def _resolve_signup_organization_name(metadata: dict) -> Optional[str]:
+    for key in ("organization_name", "organization", "workspace_name"):
+        organization_name = _normalize_organization_name(metadata.get(key))
+        if organization_name:
+            return organization_name
+    return None
+
+
+def _resolve_full_name(metadata: dict) -> Optional[str]:
+    for key in ("full_name", "name"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:255]
+    return None
+
+
+def _default_organization_id(identity: AuthIdentity) -> UUID:
+    if identity.is_demo_user:
+        return DEMO_ORG_ID
+    organization_name = _normalize_organization_name(identity.organization_name)
+    if organization_name:
+        return uuid.uuid5(uuid.NAMESPACE_URL, f"knowledge-hub:organization:{_slugify(organization_name)}")
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"knowledge-hub:organization:{identity.user_id}")
+
+
+def _build_default_workspace_profile(identity: AuthIdentity) -> tuple[UUID, str, str]:
+    organization_id = _default_organization_id(identity)
+    if identity.is_demo_user:
+        return organization_id, "Demo Workspace", "demo-workspace"
+
+    organization_name = _normalize_organization_name(identity.organization_name)
+    if not organization_name:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Your account is missing an organization workspace. Create a workspace during signup or contact an administrator.",
+        )
+    return organization_id, organization_name, _slugify(organization_name)
 
 
 async def get_auth_identity(authorization: Optional[str] = Header(default=None)) -> AuthIdentity:
@@ -95,11 +135,14 @@ async def get_auth_identity(authorization: Optional[str] = Header(default=None))
     user_id = payload.get("id")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication is required.")
+    user_metadata = payload.get("user_metadata") or {}
 
     return AuthIdentity(
         user_id=UUID(user_id),
         email=payload.get("email"),
         access_token=token,
+        full_name=_resolve_full_name(user_metadata),
+        organization_name=_resolve_signup_organization_name(user_metadata),
         is_demo_user=False,
     )
 
@@ -114,6 +157,7 @@ async def get_current_user(
         user_id=membership.user_id,
         email=identity.email,
         access_token=identity.access_token,
+        full_name=identity.full_name,
         organization_id=membership.organization_id,
         organization_name=organization.name,
         organization_slug=organization.slug,
@@ -142,41 +186,74 @@ async def require_org_admin(current_user: CurrentUser = Depends(get_current_user
 async def _ensure_membership(session: AsyncSession, identity: AuthIdentity) -> OrganizationMember:
     result = await session.execute(
         select(OrganizationMember)
+        .options(selectinload(OrganizationMember.organization))
         .where(OrganizationMember.user_id == identity.user_id)
         .order_by(OrganizationMember.joined_at.asc())
     )
     membership = result.scalars().first()
     if membership:
-        await session.refresh(membership, attribute_names=["organization"])
         return membership
 
-    organization_id = DEMO_ORG_ID if identity.is_demo_user else uuid.uuid4()
-    organization_name, organization_slug = _build_default_workspace_name(identity.email)
-    if identity.is_demo_user:
-        organization_name = "Demo Workspace"
-        organization_slug = "demo-workspace"
-
-    organization = await session.get(Organization, organization_id)
-    if not organization:
-        organization = Organization(
+    organization_id, organization_name, organization_slug = _build_default_workspace_profile(identity)
+    organization_insert = await session.execute(
+        insert(Organization)
+        .values(
             id=organization_id,
             name=organization_name,
             slug=organization_slug,
         )
-        session.add(organization)
-        await session.flush()
-
-    membership = OrganizationMember(
-        organization_id=organization.id,
-        user_id=identity.user_id,
-        role="admin",
+        .on_conflict_do_nothing(constraint="uq_organizations_slug")
+        .returning(Organization.id)
     )
-    session.add(membership)
+    created_organization_id = organization_insert.scalar_one_or_none()
+    organization_lookup = await session.execute(select(Organization).where(Organization.slug == organization_slug))
+    organization = organization_lookup.scalars().first()
+    if not organization:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="We couldn't finish setting up your organization workspace. Please try again.",
+        )
+
+    role = "admin" if created_organization_id else "member"
+    if not created_organization_id:
+        member_count = await session.scalar(
+            select(func.count()).select_from(OrganizationMember).where(OrganizationMember.organization_id == organization.id)
+        )
+        if int(member_count or 0) == 0:
+            role = "admin"
+
+    await session.execute(
+        insert(OrganizationMember)
+        .values(
+            organization_id=organization.id,
+            user_id=identity.user_id,
+            role=role,
+        )
+        .on_conflict_do_nothing(constraint="uq_organization_members_org_user")
+    )
     await session.commit()
-    await session.refresh(membership, attribute_names=["organization"])
+
+    result = await session.execute(
+        select(OrganizationMember)
+        .options(selectinload(OrganizationMember.organization))
+        .where(OrganizationMember.user_id == identity.user_id)
+        .order_by(OrganizationMember.joined_at.asc())
+    )
+    membership = result.scalars().first()
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to provision organization membership.",
+        )
     logger.info(
-        "Provisioned default organization membership",
-        extra={"organization_id": str(organization.id), "user_id": str(identity.user_id), "role": membership.role},
+        "Provisioned organization membership",
+        extra={
+            "organization_id": str(membership.organization_id),
+            "organization_slug": membership.organization.slug,
+            "user_id": str(identity.user_id),
+            "role": membership.role,
+        },
     )
     return membership
 

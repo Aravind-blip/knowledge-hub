@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:local": "printf 'Knowledge Hub frontend starting\\n  URL: http://127.0.0.1:3000\\n  API base: %s\\n  Supabase URL present: %s\\n' \"${API_BASE_URL:-http://localhost:8000}\" \"$( [ -n \"${NEXT_PUBLIC_SUPABASE_URL:-}\" ] && echo yes || echo no )\" && next dev --hostname 127.0.0.1 --port 3000",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

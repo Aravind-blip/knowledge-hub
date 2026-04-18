@@ -19,12 +19,14 @@ const navItems = [
 export function DashboardShell({
   children,
   userEmail,
+  userName,
   authEnabled,
   organizationName,
   role,
 }: {
   children: ReactNode;
   userEmail: string | null;
+  userName: string | null;
   authEnabled: boolean;
   organizationName: string | null;
   role: string | null;
@@ -52,9 +54,11 @@ export function DashboardShell({
         <div className="sidebar-panel">
           <p className="sidebar-panel__title">{authEnabled ? "Organization workspace" : "Workspace mode"}</p>
           <p className="sidebar-panel__text">
-            {authEnabled ? organizationName ?? "Provisioning workspace" : "Local demo workspace"}
+            {authEnabled ? organizationName ?? "Provisioning workspace" : "Development workspace"}
           </p>
-          {authEnabled ? <p className="sidebar-panel__text">{userEmail ?? "Signed-in user"} · {role ?? "member"}</p> : null}
+          {authEnabled ? (
+            <p className="sidebar-panel__text">{userName ?? userEmail ?? "Signed-in user"} · {role ?? "member"}</p>
+          ) : null}
         </div>
         <nav className="nav">
           {navItems.map((item) => (

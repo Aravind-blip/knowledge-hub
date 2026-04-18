@@ -45,6 +45,7 @@ Key paths:
 - [infra/docker-compose.yml](/Users/aravindbandipelli/Desktop/AravindCode-bot/infra/docker-compose.yml)
 - [backend/alembic.ini](/Users/aravindbandipelli/Desktop/AravindCode-bot/backend/alembic.ini)
 - [infra/db/migrations](/Users/aravindbandipelli/Desktop/AravindCode-bot/infra/db/migrations)
+- [docs/local-auth-testing.md](/Users/aravindbandipelli/Desktop/AravindCode-bot/docs/local-auth-testing.md)
 
 ## Implemented Capabilities
 
@@ -75,7 +76,10 @@ Key paths:
 
 - Supabase Auth is the identity provider for deployed environments.
 - Each authenticated user is resolved to an organization membership before any document, retrieval, or chat query runs.
-- The backend auto-provisions a default organization and admin membership for a first-time sign-in so local and hosted setup stay simple.
+- During signup, the frontend collects `full_name`, `email`, `password`, and `organization_name`, then stores the organization details in Supabase user metadata.
+- On the first authenticated backend request, the API provisions or joins the matching organization using that explicit `organization_name`; it does not infer a workspace from the email domain.
+- If the organization slug already exists, the user joins that organization as a `member`. If the organization is newly created, the first user is assigned the `admin` role.
+- This is the current MVP join model: entering the same organization name joins the same shared organization workspace automatically.
 - `documents`, `document_chunks`, `chat_sessions`, `chat_messages`, and `ingestion_jobs` now carry both `organization_id` and `user_id`.
 - `organization_id` is the hard isolation boundary for retrieval, document access, citations, and workspace activity.
 - `user_id` is retained for uploader attribution and per-user chat history inside an organization.
@@ -164,9 +168,25 @@ NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-5. Run `alembic -c alembic.ini upgrade head`.
-6. Start the backend and frontend.
-7. Create an account on `/login`. The backend will provision a default organization membership on the first authenticated request.
+5. In `Authentication -> URL Configuration`, add:
+   - `http://localhost:3000/login`
+   - your deployed login URL such as `https://knowledge-hub-olive.vercel.app/login`
+6. Run `alembic -c alembic.ini upgrade head`.
+7. Start the backend and frontend.
+8. Create an account on `/login` with:
+   - full name
+   - organization name
+   - any valid email address
+   - password
+9. After the first authenticated request, the backend provisions the organization membership using the signup metadata. If email confirmation is enabled, the user confirms the email first and then signs in.
+
+### Signup Behavior
+
+- Any valid email format is supported, including Gmail, Outlook, `.edu`, and custom domains.
+- Organization ownership is driven by the `organization_name` entered during signup, not by email domain.
+- Organization matching is slug-based and case-insensitive in practice because names are normalized before slug generation.
+- If the organization already exists, the user joins it instead of creating a duplicate organization with different casing or surrounding whitespace.
+- No separate profile table is required in the current app architecture; the source of truth is Supabase Auth plus `organization_members`.
 
 ### Run PostgreSQL
 
@@ -232,7 +252,7 @@ alembic -c alembic.ini upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-In this mode, the backend uses a single local demo user boundary instead of Supabase Auth so the original secret-free workflow still works on one machine.
+In this mode, the backend skips Supabase Auth for development-only plumbing checks. Use the auth-enabled setup below for the real shared-organization product flow.
 
 ## Local Organization Auth Mode
 
@@ -261,7 +281,14 @@ NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-Then run the backend and frontend as normal. Each signed-in user will be provisioned into a default organization workspace, and all document, retrieval, citation, and chat activity will stay inside that organization boundary.
+Then run the backend and frontend as normal. Each signed-in user will create or join the shared organization named during signup, and all document, retrieval, citation, and chat activity will stay inside that organization boundary.
+
+Optional readiness check:
+
+```bash
+cd /Users/aravindbandipelli/Desktop/AravindCode-bot/backend
+./.venv/bin/python scripts/local_auth_doctor.py
+```
 
 ## Local Groq Mode
 

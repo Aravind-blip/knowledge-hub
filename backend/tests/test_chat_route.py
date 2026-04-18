@@ -23,6 +23,7 @@ async def override_user():
         user_id=UUID("11111111-1111-1111-1111-111111111111"),
         email="user@example.com",
         access_token="token",
+        full_name="Avery Example",
         organization_id=UUID("22222222-2222-2222-2222-222222222222"),
         organization_name="Acme Workspace",
         organization_slug="acme-workspace",

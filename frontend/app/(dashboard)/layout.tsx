@@ -18,6 +18,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     <DashboardShell
       authEnabled={authConfigured}
       userEmail={user?.email ?? null}
+      userName={(user?.user_metadata?.full_name as string | undefined) ?? null}
       organizationName={workspace?.organization_name ?? null}
       role={workspace?.role ?? null}
     >

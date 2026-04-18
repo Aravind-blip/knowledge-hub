@@ -27,6 +27,13 @@ REQUIRED_TABLES = {
     "chat_messages",
     "ingestion_jobs",
 }
+REQUIRED_COLUMNS = {
+    "documents": {"organization_id", "user_id"},
+    "document_chunks": {"organization_id", "user_id"},
+    "chat_sessions": {"organization_id", "user_id"},
+    "chat_messages": {"organization_id", "user_id"},
+    "ingestion_jobs": {"organization_id", "user_id"},
+}
 
 
 async def get_unscoped_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -64,6 +71,15 @@ async def ensure_schema_ready() -> None:
             f"Database schema is not ready. Missing tables: {missing}. Run migrations before starting the app."
         )
 
+    missing_columns = await _get_missing_required_columns()
+    if missing_columns:
+        details = ", ".join(
+            f"{table}({', '.join(sorted(columns))})" for table, columns in sorted(missing_columns.items())
+        )
+        raise RuntimeError(
+            f"Database schema is not ready. Missing required columns: {details}. Run migrations before starting the app."
+        )
+
 
 async def _get_existing_tables_with_extension() -> set[str]:
     async with engine.begin() as conn:
@@ -99,3 +115,26 @@ async def run_migrations() -> None:
 
 async def _get_existing_tables() -> set[str]:
     return await _get_existing_tables_with_extension()
+
+
+async def _get_missing_required_columns() -> dict[str, set[str]]:
+    async with engine.begin() as conn:
+        result = await conn.execute(
+            text(
+                """
+                SELECT table_name, column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                """
+            )
+        )
+        existing_columns: dict[str, set[str]] = {}
+        for table_name, column_name in result:
+            existing_columns.setdefault(table_name, set()).add(column_name)
+
+    missing_columns: dict[str, set[str]] = {}
+    for table_name, required in REQUIRED_COLUMNS.items():
+        missing = required - existing_columns.get(table_name, set())
+        if missing:
+            missing_columns[table_name] = missing
+    return missing_columns

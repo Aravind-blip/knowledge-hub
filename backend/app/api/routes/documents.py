@@ -48,6 +48,7 @@ async def list_documents(
         documents = await service.list_documents(session, current_user.organization_id)
     except (OperationalError, ProgrammingError):
         logger.exception("Document listing failed; verifying database schema")
+        await session.rollback()
         await ensure_schema_ready()
         documents = await service.list_documents(session, current_user.organization_id)
 

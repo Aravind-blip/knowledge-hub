@@ -11,10 +11,12 @@ logger = logging.getLogger(__name__)
 async def initialize_runtime() -> None:
     settings = get_settings()
     settings.validate_runtime()
+    backend_url = f"http://127.0.0.1:{settings.api_port}"
 
     logger.info(
         "Runtime configuration loaded",
         extra={
+            "backend_url": backend_url,
             "environment": settings.app_env,
             "provider_mode": settings.resolved_generation_provider,
             "generation_provider": settings.resolved_generation_provider,
@@ -31,6 +33,7 @@ async def initialize_runtime() -> None:
     logger.info(
         "Startup checks completed",
         extra={
+            "backend_url": backend_url,
             "environment": settings.app_env,
             "provider_mode": settings.resolved_generation_provider,
             "generation_provider": settings.resolved_generation_provider,
