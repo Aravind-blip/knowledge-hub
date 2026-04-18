@@ -129,6 +129,7 @@ export function AuthForm({ initialMode = "signin" }: AuthFormProps) {
           <button
             className={`auth-card__mode-pill ${mode === "signin" ? "auth-card__mode-pill--active" : ""}`}
             type="button"
+            data-testid="auth-mode-signin"
             onClick={() => {
               setMode("signin");
               setMessage(null);
@@ -140,6 +141,7 @@ export function AuthForm({ initialMode = "signin" }: AuthFormProps) {
           <button
             className={`auth-card__mode-pill ${mode === "signup" ? "auth-card__mode-pill--active" : ""}`}
             type="button"
+            data-testid="auth-mode-signup"
             onClick={() => {
               setMode("signup");
               setMessage(null);
@@ -170,6 +172,7 @@ export function AuthForm({ initialMode = "signin" }: AuthFormProps) {
               <input
                 required
                 autoComplete="name"
+                data-testid="signup-full-name"
                 placeholder="Ava Johnson"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
@@ -180,6 +183,7 @@ export function AuthForm({ initialMode = "signin" }: AuthFormProps) {
               <input
                 required
                 autoComplete="organization"
+                data-testid="signup-organization-name"
                 placeholder="Acme Operations"
                 value={organizationName}
                 onChange={(event) => setOrganizationName(event.target.value)}
@@ -193,6 +197,7 @@ export function AuthForm({ initialMode = "signin" }: AuthFormProps) {
           <input
             required
             autoComplete="email"
+            data-testid="auth-email"
             type="email"
             placeholder="name@example.com"
             value={email}
@@ -205,6 +210,7 @@ export function AuthForm({ initialMode = "signin" }: AuthFormProps) {
           <input
             required
             autoComplete={mode === "signin" ? "current-password" : "new-password"}
+            data-testid="auth-password"
             minLength={8}
             type="password"
             placeholder={mode === "signin" ? "Enter your password" : "At least 8 characters"}
@@ -214,7 +220,7 @@ export function AuthForm({ initialMode = "signin" }: AuthFormProps) {
         </label>
 
         <div className="auth-form__footer">
-          <button className="button button--primary auth-form__submit" disabled={isPending} type="submit">
+          <button className="button button--primary auth-form__submit" data-testid="auth-submit" disabled={isPending} type="submit">
             {submitLabel}
           </button>
           <p className="auth-form__hint">

@@ -53,9 +53,13 @@ export function DashboardShell({
         </div>
         <div className="sidebar-panel">
           <p className="sidebar-panel__title">{authEnabled ? "Organization" : "Workspace mode"}</p>
-          <p className="sidebar-panel__text">{authEnabled ? organizationName ?? "Provisioning workspace" : "Development workspace"}</p>
+          <p className="sidebar-panel__text" data-testid="workspace-organization">
+            {authEnabled ? organizationName ?? "Provisioning workspace" : "Development workspace"}
+          </p>
           {authEnabled ? (
-            <p className="sidebar-panel__text">{userName ?? userEmail ?? "Signed-in user"} · {role ?? "member"}</p>
+            <p className="sidebar-panel__text" data-testid="workspace-user">
+              {userName ?? userEmail ?? "Signed-in user"} · {role ?? "member"}
+            </p>
           ) : null}
         </div>
         <nav className="nav">
@@ -78,7 +82,7 @@ export function DashboardShell({
             Files, search, and cited excerpts stay isolated to your organization boundary.
           </p>
           {authEnabled ? (
-            <button className="button button--secondary" onClick={signOut} type="button">
+            <button className="button button--secondary" data-testid="sign-out-button" onClick={signOut} type="button">
               Sign out
             </button>
           ) : null}

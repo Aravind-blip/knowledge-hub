@@ -46,6 +46,7 @@ Key paths:
 - [backend/alembic.ini](/Users/aravindbandipelli/Desktop/AravindCode-bot/backend/alembic.ini)
 - [infra/db/migrations](/Users/aravindbandipelli/Desktop/AravindCode-bot/infra/db/migrations)
 - [docs/local-auth-testing.md](/Users/aravindbandipelli/Desktop/AravindCode-bot/docs/local-auth-testing.md)
+- [docs/testing-at-scale.md](/Users/aravindbandipelli/Desktop/AravindCode-bot/docs/testing-at-scale.md)
 
 ## Implemented Capabilities
 
@@ -66,6 +67,8 @@ Key paths:
 - Organization-scoped retrieval and API filtering to prevent cross-organization access
 - Supabase/Postgres row-level security policies driven by request-scoped organization context
 - Automated retrieval and answer evaluation with JSONL datasets and artifact output
+- Bulk upload automation for large ingestion batches and indexing verification
+- Playwright browser testing for auth, organization sharing, and isolation
 - k6-based load testing for listing, ask/search, and optional upload workflows
 - Metric-focused workspace summary cards for retrieval quality, fallback precision, and latency
 - Docker-based local development
@@ -282,6 +285,17 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
 Then run the backend and frontend as normal. Each signed-in user will create or join the shared organization named during signup, and all document, retrieval, citation, and chat activity will stay inside that organization boundary.
+
+## Automated Testing and Scale Verification
+
+Knowledge Hub includes:
+
+- bulk upload automation for 10, 50, and 100 file batches
+- Playwright end-to-end tests for signup, login, org sharing, and isolation
+- retrieval evaluation against a labeled dataset
+- k6 load testing for login, documents list, ask/search, and optional upload
+
+See [docs/testing-at-scale.md](/Users/aravindbandipelli/Desktop/AravindCode-bot/docs/testing-at-scale.md) for exact commands, environment requirements, and SQL verification queries.
 
 Optional readiness check:
 

@@ -54,6 +54,7 @@ export function UploadForm() {
         <input
           accept=".pdf,.txt,.md,text/plain,text/markdown,application/pdf"
           className="sr-only"
+          data-testid="file-upload-input"
           type="file"
           onChange={(event) => {
             const file = event.target.files?.[0];
