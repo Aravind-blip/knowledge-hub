@@ -62,6 +62,7 @@ async def test_get_supabase_jwks_caches_keys(monkeypatch: pytest.MonkeyPatch) ->
     _jwks_cache["expires_at"] = 0.0
     _jwks_cache["keys_by_kid"] = {}
     calls = {"count": 0}
+    monkeypatch.setattr("app.core.auth.settings.supabase_url", "https://ssvvikqqbxfvlsosrlnd.supabase.co")
 
     class DummyResponse:
         def raise_for_status(self) -> None:
